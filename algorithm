@@ -1,4 +1,4 @@
-Rough logic:
+Rough logic: (not totally in sync with code)
 
 assumptions:
 1) thin_rmap produces mappings sorted by data_block numbers.
