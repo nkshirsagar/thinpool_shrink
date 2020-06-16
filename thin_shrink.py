@@ -342,7 +342,7 @@ def restore_xml_and_swap_metadata(pool_to_shrink):
     #print lvname
     #search for the tmeta size in lvs -a
     cmd = "lvs -a | grep " + "\"" + " " + vgname + " \" " + "|" + " grep " + "\"" + "\\" +  "[" + lvname + "_tmeta]\"" + " > /tmp/metadata_lv"
-    print cmd
+    #print cmd
     os.system(cmd)
     with open('/tmp/metadata_lv', 'r') as myfile:
       tmeta_line = myfile.read()
