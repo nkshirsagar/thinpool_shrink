@@ -307,7 +307,7 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                             free_ranges.sort(key=lambda x: x[1])
                             break
 
-            print "change list is..\n"
+            print "\nchange list is.."
             print changed_list                         
 
             if(len(changed_list) == len(ranges_requiring_move)):
@@ -446,7 +446,7 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
         len = changed_entry[2]
         print ("moving %d blocks at %d to %d" % (len , old_block , new_block) )
         cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + chunksize_string + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(len) + " conv=notrunc"
-        print cmd
+        #print cmd
         os.system(cmd)
 
 def cleanup(shrink_device, pool_to_shrink):
@@ -520,7 +520,7 @@ def main():
         print("This pool has been shrunk to the specified size of %s" % (size_to_shrink))
     else:
         changed_list = change_xml(chunks_to_shrink_to,1)
-        if(len(changed_list) > 1):
+        if(len(changed_list) > 0):
             move_blocks(changed_list,shrink_device,chunksz_string)
             restore_xml_and_swap_metadata(pool_to_shrink)
             change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_in_bytes)
