@@ -34,6 +34,7 @@ are available for moving the range mappings outside the new limit.
 thin_shrink will not break up range mappings and convert them to single mappings
 to overcome this constraint. (Maybe in future versions)
 
-
+The new_size specified with -L doesn't take decimals, so use M, G or T appropriately to come 
+close to the size you want to reduce to. Also, the size needs to be a multiple of PV extent size.
 
 
