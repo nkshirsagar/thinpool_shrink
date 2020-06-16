@@ -1,0 +1,281 @@
+Testing:
+
+Scenario 1)
+No moves required here, Pool can be shrunk because last mapped block is less than the reduced size specified.
+
+[root@localhost thin_shrink]# ./thin_shrink.py -L2600m -tthinvg/p1 
+dmsetup create shrink_p1 --table '0 10485760 linear 252:48 2048'
+lvs -o +chunksize thinvg/p1 | grep -v Chunk > /tmp/chunksize
+lvchange -an thinvg/p1
+lvchange -ay thinvg/p1_tmeta -y
+  Allowing activation of component LV.
+thin_dump /dev/thinvg/p1_tmeta > /tmp/dump
+thin_rmap --region 0..44800 /dev/thinvg/p1_tmeta > /tmp/rmap
+lvchange -an thinvg/p1_tmeta 
+Need to shrink pool to this number of chunks   ---- 41600
+Yes, this pool can be shrunk. Last mapped block is 40175 and new size in chunks is 41600
+
+lvs -a | grep " thinvg " | grep "\[p1_tmeta]" > /tmp/metadata_lv
+lvcreate -n restore_lv -L8m thinvg
+  WARNING: Sum of all thin volume sizes (14.00 GiB) exceeds the size of thin pools (2.73 GiB).
+  WARNING: You have not turned on protection against thin pools running out of space.
+  WARNING: Set activation/thin_pool_autoextend_threshold below 100 to trigger automatic extension of thin pools before they get full.
+  Logical volume "restore_lv" created.
+thin_restore -i /tmp/changed.xml -o /dev/thinvg/restore_lv
+Restoring: [==================================================]   100%
+lvconvert --thinpool thinvg/p1 --poolmetadata /dev/thinvg/restore_lv -y
+vgcfgbackup -f /tmp/vgmeta_backup thinvg
+  Volume group "thinvg" successfully backed up.
+  WARNING: Forced restore of Volume Group thinvg with thin volumes.
+  Restored volume group thinvg
+  Logical volume "restore_lv" successfully removed
+  0 logical volume(s) in volume group "thinvg" now active
+This pool has been shrunk to the specified size of 2600m
+
+------------------------------------------------------------------------------
+Shrink further to 2.4G, moving blocks around is required. Only ranges in this case.
+
+[root@localhost thin_shrink]# ./thin_shrink.py -L2400m -tthinvg/p1 
+dmsetup create shrink_p1 --table '0 10485760 linear 252:48 2048'
+lvs -o +chunksize thinvg/p1 | grep -v Chunk > /tmp/chunksize
+lvchange -an thinvg/p1
+lvchange -ay thinvg/p1_tmeta -y
+  Allowing activation of component LV.
+thin_dump /dev/thinvg/p1_tmeta > /tmp/dump
+thin_rmap --region 0..41600 /dev/thinvg/p1_tmeta > /tmp/rmap
+lvchange -an thinvg/p1_tmeta 
+Need to shrink pool to this number of chunks   ---- 38400
+Changes needed to metadata and blocks will be copied
+
+allocated ranges are..
+
+[[0, 2], [2, 1], [3, 1], [4, 160], [164, 1], [165, 1], [166, 1], [167, 1], [168, 1], [169, 1], [170, 1], [171, 1], [172, 1], [173, 1], [174, 1], [175, 1], [176, 1], [177, 1], [178, 1], [179, 2], [181, 1], [182, 1], [183, 160], [343, 1], [344, 1], [345, 1], [346, 1], [347, 1], [348, 1], [349, 1], [350, 1], [351, 1], [352, 1], [353, 1], [354, 192], [8350, 992], [9342, 1024], [10366, 1024], [11390, 984], [12374, 40], [12414, 1024], [13438, 1024], [14462, 1024], [15486, 864], [24350, 992], [25342, 1024], [26366, 1024], [27390, 984], [28374, 40], [28414, 1024], [29438, 1024], [30462, 1024], [31486, 864], [32351, 2047], [34398, 1249], [35656, 1], [35657, 1], [35658, 1], [35659, 1], [35660, 1], [35661, 1], [35662, 1], [35663, 1], [35664, 3808], [39472, 704]]
+
+sorted free ranges are
+
+[[32350, 1], [35647, 9], [546, 7804], [16350, 8000]]
+
+reverse sorted ranges requiring move are
+
+[[35664, 3808], [39472, 704]]
+change list is..
+
+[[35664, 546, 3808], [39472, 4354, 704]]
+moving 3808 blocks at 35664 to 546
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35664 seek=546 count=3808 conv=notrunc
+3808+0 records in
+3808+0 records out
+249561088 bytes (250 MB) copied, 3.86304 s, 64.6 MB/s
+moving 704 blocks at 39472 to 4354
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=39472 seek=4354 count=704 conv=notrunc
+704+0 records in
+704+0 records out
+46137344 bytes (46 MB) copied, 0.414274 s, 111 MB/s
+lvs -a | grep " thinvg " | grep "\[p1_tmeta]" > /tmp/metadata_lv
+lvcreate -n restore_lv -L8m thinvg
+  WARNING: Sum of all thin volume sizes (14.00 GiB) exceeds the size of thin pools (<2.54 GiB).
+  WARNING: You have not turned on protection against thin pools running out of space.
+  WARNING: Set activation/thin_pool_autoextend_threshold below 100 to trigger automatic extension of thin pools before they get full.
+  Logical volume "restore_lv" created.
+thin_restore -i /tmp/changed.xml -o /dev/thinvg/restore_lv
+Restoring: [==================================================]   100%
+lvconvert --thinpool thinvg/p1 --poolmetadata /dev/thinvg/restore_lv -y
+vgcfgbackup -f /tmp/vgmeta_backup thinvg
+  Volume group "thinvg" successfully backed up.
+  WARNING: Forced restore of Volume Group thinvg with thin volumes.
+  Restored volume group thinvg
+  Logical volume "restore_lv" successfully removed
+  0 logical volume(s) in volume group "thinvg" now active
+This pool has been shrunk to the specified size of 2400m
+
+[root@localhost thin_shrink]# diff /tmp/dump /tmp/changed.xml 
+1c1
+< <superblock uuid="" time="0" transaction="2" flags="0" version="2" data_block_size="128" nr_data_blocks="41600">
+---
+> <superblock uuid="" time="0" transaction="2" flags="0" version="2" data_block_size="128" nr_data_blocks="38400">
+24c24
+<     <range_mapping origin_begin="19499" data_begin="39472" length="704" time="0"/>
+---
+>     <range_mapping origin_begin="19499" data_begin="4354" length="704" time="0"/>
+62c62
+<     <range_mapping origin_begin="16385" data_begin="35664" length="3808" time="0"/>
+---
+>     <range_mapping origin_begin="16385" data_begin="546" length="3808" time="0"/>
+
+
+
+
+[root@localhost thin_shrink]# vgchange -ay
+  3 logical volume(s) in volume group "thinvg" now active
+  2 logical volume(s) in volume group "rhel_vm253-73" now active
+[root@localhost thin_shrink]# mount /dev/thinvg/t1 /home/nkshirsa/formt/t1
+[root@localhost thin_shrink]# umount /home/nkshirsa/formt/t1
+[root@localhost thin_shrink]# vgchange -an thinvg
+  0 logical volume(s) in volume group "thinvg" now active
+
+-------------------------------------------------------------------------------
+
+Scenario 3)
+Another run which required both range and single mappings to be moved:
+Shrink further to 2200MB,
+
+[root@localhost thin_shrink]# ./thin_shrink.py -L2200m -tthinvg/p1 
+dmsetup create shrink_p1 --table '0 10485760 linear 252:48 2048'
+lvs -o +chunksize thinvg/p1 | grep -v Chunk > /tmp/chunksize
+lvchange -an thinvg/p1
+lvchange -ay thinvg/p1_tmeta -y
+  Allowing activation of component LV.
+thin_dump /dev/thinvg/p1_tmeta > /tmp/dump
+thin_rmap --region 0..38400 /dev/thinvg/p1_tmeta > /tmp/rmap
+lvchange -an thinvg/p1_tmeta 
+Need to shrink pool to this number of chunks   ---- 35200
+Changes needed to metadata and blocks will be copied
+
+allocated ranges are..
+
+[[0, 2], [2, 1], [3, 1], [4, 160], [164, 1], [165, 1], [166, 1], [167, 1], [168, 1], [169, 1], [170, 1], [171, 1], [172, 1], [173, 1], [174, 1], [175, 1], [176, 1], [177, 1], [178, 1], [179, 2], [181, 1], [182, 1], [183, 160], [343, 1], [344, 1], [345, 1], [346, 1], [347, 1], [348, 1], [349, 1], [350, 1], [351, 1], [352, 1], [353, 1], [354, 192], [546, 3808], [4354, 704], [8350, 992], [9342, 1024], [10366, 1024], [11390, 984], [12374, 40], [12414, 1024], [13438, 1024], [14462, 1024], [15486, 864], [24350, 992], [25342, 1024], [26366, 1024], [27390, 984], [28374, 40], [28414, 1024], [29438, 1024], [30462, 1024], [31486, 864], [32351, 2047], [34398, 1249], [35656, 1], [35657, 1], [35658, 1], [35659, 1], [35660, 1], [35661, 1], [35662, 1], [35663, 1]]
+
+sorted free ranges are
+
+[[32350, 1], [5058, 3292], [16350, 8000]]
+
+reverse sorted ranges requiring move are
+
+[[34398, 1249], [35656, 1], [35657, 1], [35658, 1], [35659, 1], [35660, 1], [35661, 1], [35662, 1], [35663, 1]]
+change list is..
+
+[[34398, 5058, 1249], [35656, 6307, 1], [35657, 6308, 1], [35658, 6309, 1], [35659, 6310, 1], [35660, 6311, 1], [35661, 6312, 1], [35662, 6313, 1], [35663, 6314, 1]]
+moving 1249 blocks at 34398 to 5058
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=34398 seek=5058 count=1249 conv=notrunc
+1249+0 records in
+1249+0 records out
+81854464 bytes (82 MB) copied, 1.26161 s, 64.9 MB/s
+moving 1 blocks at 35656 to 6307
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35656 seek=6307 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000855498 s, 76.6 MB/s
+moving 1 blocks at 35657 to 6308
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35657 seek=6308 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.00157816 s, 41.5 MB/s
+moving 1 blocks at 35658 to 6309
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35658 seek=6309 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000324833 s, 202 MB/s
+moving 1 blocks at 35659 to 6310
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35659 seek=6310 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000380861 s, 172 MB/s
+moving 1 blocks at 35660 to 6311
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35660 seek=6311 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000324412 s, 202 MB/s
+moving 1 blocks at 35661 to 6312
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35661 seek=6312 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000530414 s, 124 MB/s
+moving 1 blocks at 35662 to 6313
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35662 seek=6313 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000383886 s, 171 MB/s
+moving 1 blocks at 35663 to 6314
+dd if=/dev/mapper/shrink_p1 of=/dev/mapper/shrink_p1 bs=64k skip=35663 seek=6314 count=1 conv=notrunc
+1+0 records in
+1+0 records out
+65536 bytes (66 kB) copied, 0.000435793 s, 150 MB/s
+lvs -a | grep " thinvg " | grep "\[p1_tmeta]" > /tmp/metadata_lv
+lvcreate -n restore_lv -L8m thinvg
+  WARNING: Sum of all thin volume sizes (14.00 GiB) exceeds the size of thin pools (2.34 GiB).
+  WARNING: You have not turned on protection against thin pools running out of space.
+  WARNING: Set activation/thin_pool_autoextend_threshold below 100 to trigger automatic extension of thin pools before they get full.
+  Logical volume "restore_lv" created.
+thin_restore -i /tmp/changed.xml -o /dev/thinvg/restore_lv
+Restoring: [==================================================]   100%
+lvconvert --thinpool thinvg/p1 --poolmetadata /dev/thinvg/restore_lv -y
+vgcfgbackup -f /tmp/vgmeta_backup thinvg
+  Volume group "thinvg" successfully backed up.
+  WARNING: Forced restore of Volume Group thinvg with thin volumes.
+  Restored volume group thinvg
+  Logical volume "restore_lv" successfully removed
+  0 logical volume(s) in volume group "thinvg" now active
+This pool has been shrunk to the specified size of 2200m
+[root@localhost thin_shrink]# 
+
+
+[root@localhost thin_shrink]# diff /tmp/dump /tmp/changed.xml 
+1c1
+< <superblock uuid="" time="0" transaction="2" flags="0" version="2" data_block_size="128" nr_data_blocks="38400">
+---
+> <superblock uuid="" time="0" transaction="2" flags="0" version="2" data_block_size="128" nr_data_blocks="35200">
+5c5
+<     <single_mapping origin_block="994" data_block="35656" time="0"/>
+---
+>     <single_mapping origin_block="994" data_block="6307" time="0"/>
+7c7
+<     <single_mapping origin_block="2019" data_block="35657" time="0"/>
+---
+>     <single_mapping origin_block="2019" data_block="6308" time="0"/>
+9c9
+<     <single_mapping origin_block="3044" data_block="35658" time="0"/>
+---
+>     <single_mapping origin_block="3044" data_block="6309" time="0"/>
+11c11
+<     <single_mapping origin_block="4029" data_block="35659" time="0"/>
+---
+>     <single_mapping origin_block="4029" data_block="6310" time="0"/>
+13c13
+<     <single_mapping origin_block="4070" data_block="35660" time="0"/>
+---
+>     <single_mapping origin_block="4070" data_block="6311" time="0"/>
+15c15
+<     <single_mapping origin_block="5095" data_block="35661" time="0"/>
+---
+>     <single_mapping origin_block="5095" data_block="6312" time="0"/>
+17c17
+<     <single_mapping origin_block="6120" data_block="35662" time="0"/>
+---
+>     <single_mapping origin_block="6120" data_block="6313" time="0"/>
+19c19
+<     <single_mapping origin_block="7145" data_block="35663" time="0"/>
+---
+>     <single_mapping origin_block="7145" data_block="6314" time="0"/>
+23c23
+<     <range_mapping origin_begin="18250" data_begin="34398" length="1249" time="0"/>
+---
+>     <range_mapping origin_begin="18250" data_begin="5058" length="1249" time="0"/>
+[root@localhost thin_shrink]# 
+
+
+[root@localhost thin_shrink]# vgchange -ay thinvg
+  3 logical volume(s) in volume group "thinvg" now active
+[root@localhost thin_shrink]# mount /dev/thinvg/t1 /home/nkshirsa/formt/t1
+[root@localhost thin_shrink]# ls /home/nkshirsa/formt/t1/
+folder2/  somefile  
+[root@localhost thin_shrink]# ls /home/nkshirsa/formt/t1/
+folder2  somefile
+[root@localhost thin_shrink]# 
+
+
+[root@localhost thin_shrink]# diff /tmp/vgmeta_backup /tmp/changed_vgmeta 
+59c59
+< 				extent_count = 600	# 2.34375 Gigabytes
+---
+> 				extent_count = 550
+[root@localhost thin_shrink]#
+
+
+[root@localhost thin_shrink]# lvs
+  LV   VG            Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  root rhel_vm253-73 -wi-ao---- <13.87g                                                    
+  swap rhel_vm253-73 -wi-ao----   1.60g                                                    
+  p1   thinvg        twi-aotz--  <2.15g             69.21  20.02                           
+  t1   thinvg        Vwi-aotz--  10.00g p1          7.44                                   
+  t2   thinvg        Vwi-a-tz--   4.00g p1          18.58                                  
+[root@localhost thin_shrink]#
