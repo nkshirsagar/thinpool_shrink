@@ -1,0 +1,115 @@
+Rough logic: (not totally in sync with code)
+
+assumptions:
+1) thin_rmap produces mappings sorted by data_block numbers.
+
+usage: thin_shrink.py -L new_size -t vgname/poolname
+
+
+0) verify args, sanity checks, etc..
+1) activate the pool if not activated, parse dmsetup table of the pool and create a shrink_tdata device with same mapping, i.e parse from dmsetup table the poolname_tdata mappings,
+
+for eg: thinvg-p1_tdata: 0 2097152 linear 252:32 10240
+
+and create a new dm device like this:
+dmsetup create shrink_tdata --table '0 2097152 linear 252:32 10240'
+
+This is because the pool is going to be deactivated to do the shrinking, and we need tdata access in r/w mode. 
+(activating it using lvm, activates it only in readonly mode)
+
+2) run lvs -o+chunksize and get chunksize of the pool we need to shrink.
+3) Deactivate the pool, activate metadata readonly
+4) thin_dump the metadata into a file, thin_rmap the metadata into a file
+
+5) convert new size to bytes then divide by chunksize we got in step 2. Now we have the size_to_shrink_to, in chunks. 
+
+6) parse the thin_dump'd file (example pasted below) and add up all the mapped_blocks of each thinlv. 
+   If this is larger than new_size in chunks, reject the shrink straightaway and exit.  
+
+<superblock uuid="" time="0" transaction="1" flags="0" version="2" data_block_size="128" nr_data_blocks="16384">
+  <device dev_id="1" mapped_blocks="4501" transaction="0" creation_time="0" snap_time="0">
+    <range_mapping origin_begin="0" data_begin="0" length="2" time="0"/>
+    <single_mapping origin_block="6" data_block="573" time="0"/>
+...
+
+
+7) Check if the last block in the allocated_ranges is lesser than the new_size in chunks. 
+    If yes, the pool can be shrunk straight away, no need to move anything! change nr_data_blocks in the thin_dumped file to new_size 
+    and change the VG metadata too. 
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        logical_volumes {
+
+                p1 {
+                        id = "8U93uO-eQ2L-JwDD-niZ4-gaJl-lweB-SCPh3O"
+                        status = ["READ", "WRITE", "VISIBLE"]
+                        flags = []
+                        creation_time = 1591794117      # 2020-06-10 18:31:57 +0530
+                        creation_host = "localhost.localdomain"
+                        segment_count = 1
+
+                        segment1 {
+                                start_extent = 0
+                                extent_count = 256      # 1024 Megabytes <------
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+8) parse thin_rmap output and create the data structures mentioned below,
+
+
+data structures:
+
+a) 
+list: allocated_ranges: each element is of type (block,length)
+Eg - [(0,2) , (4,160) , (164,1) , (165,1) etc ... ]  
+note - A single_mapping is treated as a range with length 1, to eliminate a separate data structure for 
+storing single_mappings. This list will be created ready-sorted in ascending order of block. 
+
+b) 
+list: free_ranges generated using the gaps in the rmap figures line by line.
+This is a python list of lists. each element is of type (block,length)
+[(171,49), (221,76), (298,7) , etc ... ]  
+This list includes free single blocks, treated as free ranges of length 1. (like 1 free block stuck between 2 allocated ranges. I don't expect many of these.)
+Reverse sort this on length.
+free_ranges.sort(key=lambda x: x[1], reverse=True)
+
+Also create 
+
+list: ranges_to_move 
+(These contain all the elements of allocated_ranges whose starting block+len is larger than size_to_shrink_to 
+
+list: changed_list 
+The changed_list can be treated as a useful output to tools that can better optimise the
+actual block copying. (thin_shrink uses dd)
+
+9) Sort the free_ranges list by length. 
+
+10) Reverse sort ranges_to_move according to length (we will begin moving the largest range mappings) 
+
+11) loop through ranges_to_move and check if there are suitable (closest in length) ranges free in free_ranges list. 
+If so, add entry to changed_list, and change the free_ranges list accordingly. 
+
+12) if changed_list is same in length to ranges_to_move ,we can proceed with the block copy using dd. Else say pool cannot be 
+shrunk and exit, removing all extra devices we created. 
+
+13) change nr_data_blocks in the thin_dumped file to new_size. Change the xml block mappings according to changed_list, 
+i.e each occurrence of the block number in either data_begin or data_block must be changed to the new numbers. Write out
+a new xml mapping for thin-restoring to. Backup the metadata, then change it for the vgcfgrestore with new size. (change the pool
+device since it has just 1 segment, instead of trying to change tdata which could potentially have many segments, and it
+may get complex deciding which segment needs reduction by how much to end up with the tdata size as the reduced size. )
+
+14) thin_restore the changed xml into a new lv created in the same VG, vgcfgrestore the meta.
+
+15) User can then activate the pool and thinlvs and mount the thin lvs.
+
+
+
+
+
+
+
+

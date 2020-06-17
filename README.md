@@ -14,26 +14,24 @@ limit specified by the new size.
 However, once the mappings are moved to free ranges or blocks inside the new 
 limit, the pool can be safely reduced. 
 
-The script takes care of changing the thinpool  as well as the VG metadata, 
-and does the necessary thin and VGcfg restores.
+The script takes care of ensuring correct mappings in order to reduce the pool (if possible), i.e changing the thinpool meta data as well as the VG metadata, and does the necessary thin and vgcfg restores.
 
-Run this script on deactivated and unmounted thin pools, this is an offline
-reduction, not online.
+Run this script on deactivated and unmounted thin pools, this is an offline reduction, not online.
 
-At the end of the run, you will have a deactivated thin pool (hopefully) 
-reduced to the size you specified.
+At the end of the run, you will have a deactivated thin pool reduced to the size you specified, if reduce was possible [1]
 
 Usage:
 ./thin_shrink -L new_size -t vgname/poolname
 
-The pool will not reduce in size if the new size is lesser than the number of
-mapped blocks in the pool.
+As of today, thin_shrink will not break up range mappings and convert them to single mappings
+to try a possible fit of range mappings though there is no continous space available.
 
-The pool will also not reduce in size if there is no contiguous extents that 
+The new_size specified with -L doesn't take decimals, so use M, G or T appropriately to come 
+close to the size you want to reduce to. Also, the size needs to be a multiple of PV extent size.
+
+
+[1] The pool will not reduce in size if the new size is lesser than the number of
+mapped blocks in the pool. The pool will also not reduce in size if there are no contiguous extents that 
 are available for moving the range mappings outside the new limit. 
-thin_shrink will not break up range mappings and convert them to single mappings
-to overcome this constraint. (Maybe in future versions)
 
-
-
-
+-----------------------------------
