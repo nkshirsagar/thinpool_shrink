@@ -88,19 +88,23 @@ actual block copying. (thin_shrink uses dd)
 
 9) Sort the free_ranges list by length. 
 
-11) Reverse sort ranges_to_move according to length (we will begin moving the largest range mappings) 
+10) Reverse sort ranges_to_move according to length (we will begin moving the largest range mappings) 
 
-12) loop through ranges_to_move and check if there are suitable (closest in length) ranges free in free_ranges list. 
+11) loop through ranges_to_move and check if there are suitable (closest in length) ranges free in free_ranges list. 
 If so, add entry to changed_list, and change the free_ranges list accordingly. 
 
-13) if changed_list is same in length to ranges_to_move ,we can proceed with the block copy using dd. Else say pool cannot be 
+12) if changed_list is same in length to ranges_to_move ,we can proceed with the block copy using dd. Else say pool cannot be 
 shrunk and exit, removing all extra devices we created. 
 
-14) change nr_data_blocks in the thin_dumped file to new_size and change VG metadata
+13) change nr_data_blocks in the thin_dumped file to new_size. Change the xml block mappings according to changed_list, 
+i.e each occurrence of the block number in either data_begin or data_block must be changed to the new numbers. Write out
+a new xml mapping for thin-restoring to. Backup the metadata, then change it for the vgcfgrestore with new size. (change the pool
+device since it has just 1 segment, instead of trying to change tdata which could potentially have many segments, and it
+may get complex deciding which segment needs reduction by how much to end up with the tdata size as the reduced size. )
 
-15) thin_restore the changed xml into a new lv created in the same VG, vgcfgrestore the meta.
+14) thin_restore the changed xml into a new lv created in the same VG, vgcfgrestore the meta.
 
-16) User can then activate the pool and thinlvs and mount the thin lvs.
+15) User can then activate the pool and thinlvs and mount the thin lvs.
 
 
 
