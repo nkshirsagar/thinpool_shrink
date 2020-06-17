@@ -50,12 +50,12 @@ def deactivate_metadata(pool_name):
 
 def thin_dump_metadata(pool_name):
     cmd_to_run = "thin_dump /dev/" + pool_name + "_tmeta" + " > /tmp/dump"
-    print cmd_to_run
+    #print cmd_to_run
     os.system(cmd_to_run)
 
 def thin_rmap_metadata(pool_name, nr_chunks_str):
     cmd_to_run = "thin_rmap --region 0.." + nr_chunks_str + " /dev/" + pool_name + "_tmeta" + " > /tmp/rmap"
-    print cmd_to_run
+    #print cmd_to_run
     os.system(cmd_to_run)
 
 def get_nr_chunks():
@@ -98,7 +98,7 @@ def create_shrink_device(pool_name):
 def get_chunksize(pool_name):
     cmd = "lvs -o +chunksize " + pool_name + " | grep -v Chunk" + " > /tmp/chunksize"
     #print "running this cmd now... \n" 
-    print cmd
+    #print cmd
     
     os.system(cmd)
     with open('/tmp/chunksize', 'r') as myfile:
@@ -126,14 +126,13 @@ def get_total_mapped_blocks():
         mapped_blocks = split_line[2] 
         #print mapped_blocks
         num_mapped_blocks = mapped_blocks.split("=")[1] 
-        #print num_mapped_blocks
         
         trimmed_mapped_blocks = num_mapped_blocks[1:-1]
         #print trimmed_mapped_blocks
         trimmed_mapped_blocks_int = int(trimmed_mapped_blocks)
         total_mapped_blocks = total_mapped_blocks + trimmed_mapped_blocks_int
         
-    #print total_mapped_blocks
+    print ("number of mapped blocks are ..  %d" % ( total_mapped_blocks ))
     return total_mapped_blocks
         
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
@@ -212,7 +211,7 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
             new_xml.close()
     else:
         # we need to dd blocks, change the numbers in the xml, etc            
-        print "Changes needed to metadata and blocks will be copied"
+        print "Checking if blocks can be copied"
         allocated_ranges = []
         free_ranges = []
         earlier_element=[]
@@ -266,16 +265,16 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                         #earlier_element = range_to_add
                 earlier_element = range_to_add                  
 
-            print "\nallocated ranges are..\n"
+            print "\nallocated ranges are.."
             print allocated_ranges 
-            #print "\nfree ranges are..\n"
+            #print "\nfree ranges are.."
             #print free_ranges
             free_ranges.sort(key=lambda x: x[1])
-            print "\nsorted free ranges are\n"
+            print "\nsorted free ranges are"
             print free_ranges
             
             ranges_requiring_move.sort(key=lambda x: x[1], reverse=True)
-            print "\nreverse sorted ranges requiring move are\n"
+            print "\nranges requiring move are"
             print ranges_requiring_move
  
             for each_range in ranges_requiring_move:
@@ -314,8 +313,7 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                 replace_chunk_numbers_in_xml(chunks_to_shrink_to ,changed_list) 
                 return changed_list
             else:
-                print "Cannot fit every range requiring move to free ranges. Aborting.."
-                print "\nThis pool cannot be shrunk"
+                print "Cannot fit every range requiring move to free ranges. Cannot shrink pool."
                 changed_list = []
                 return changed_list
 
@@ -330,7 +328,7 @@ def check_pool_shrink_without_dd(chunks_to_shrink_to):
         last_block = last_range.split(".")[2]
         last_block_long = long(last_block)
         if ((last_block_long - 1) < chunks_to_shrink_to):
-            print "Yes, this pool can be shrunk. Last mapped block is %d and new size in chunks is %d\n" % ((last_block_long - 1), chunks_to_shrink_to )
+            print "This pool can be shrunk without moving blocks. Last mapped block is %d and new size in chunks is %d\n" % ((last_block_long - 1), chunks_to_shrink_to )
             return 1
             
 def restore_xml_and_swap_metadata(pool_to_shrink):
@@ -499,14 +497,14 @@ def main():
     size_to_shrink_to_in_bytes = calculate_size_in_bytes(size_to_shrink)
     #print size_to_shrink_to_in_bytes
     chunks_to_shrink_to = size_to_shrink_to_in_bytes/chunksize_in_bytes
-    print "Need to shrink pool to this number of chunks   ---- " + str(chunks_to_shrink_to)
+    print "Need to shrink pool to number of chunks - " + str(chunks_to_shrink_to)
 
-    if(chunks_to_shrink_to > int(nr_chunks)):
+    if(chunks_to_shrink_to >= int(nr_chunks)):
         print "This thin pool cannot be shrunk. The pool is already smaller than the size provided."
         cleanup(shrink_device,pool_to_shrink)
         exit()
 
-    if (total_mapped_blocks > chunks_to_shrink_to):
+    if (total_mapped_blocks >= chunks_to_shrink_to):
         print "This thin pool cannot be shrunk. The mapped chunks are more than the lower size provided. Discarding allocated blocks from the pool may help."
         cleanup(shrink_device,pool_to_shrink)
         exit()
