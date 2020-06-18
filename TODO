@@ -1,0 +1,22 @@
+TODO:
+
+1) returns, sanity checks, and other checks.
+
+2) round off passed smaller size to multiple of extent side
+
+3) allow decimals in size
+
+4) Change tdata lv also along with the pool lv to fix this issue:
+
+[root@localhost thinpool_shrink]# vgremove thinvg 
+
+  LV segment p1:0-4294967295 is incorrectly listed as being used by LV p1_tdata
+  Internal error: LV segments corrupted in p1_tdata.
+
+-------------------------------
+
+5) Split ranges into individual blocks if shrinking technically possible, but cannot fit ranges as they are.
+
+6) Suggest smallest size pool can be shrunk to. (only possible when 5 is implemented)
+
+7) Port to rust ?
