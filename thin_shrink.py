@@ -79,26 +79,34 @@ def create_shrink_device(pool_name):
     #print cmd
     os.system(cmd)
     with open('/tmp/dmsetup_table_grepped', 'r') as myfile:
-      dmsetup_line = myfile.read()
-    #print dmsetup_line
+      dmsetup_lines = myfile.readlines()
+    print dmsetup_lines
     myfile.close()
-    os.remove('/tmp/dmsetup_table_grepped')
-    split_dmsetup_line = dmsetup_line.split(':' , 1)
-    #print split_dmsetup_line[1]
-    dmsetup_table_entry_of_tdata = split_dmsetup_line[1].lstrip()
-    #print dmsetup_table_entry_of_tdata
-    dmsetup_cmd = "dmsetup create shrink_" + poolname.rstrip() + " --table " + "\'" + dmsetup_table_entry_of_tdata.rstrip() + "\'"
+    dmsetup_cmd = "echo -e " 
+    for line_iter in range(0, len(dmsetup_lines)):
+        split_dmsetup_line = dmsetup_lines[line_iter].split(':' , 1)
+        print split_dmsetup_line[1]
+        dmsetup_table_entry_of_tdata = split_dmsetup_line[1].lstrip()
+        print dmsetup_table_entry_of_tdata
+        if (line_iter > 0):
+            dmsetup_cmd = dmsetup_cmd + "\\" + "\\" + "n"
+        dmsetup_cmd = dmsetup_cmd + "\'" + dmsetup_table_entry_of_tdata.rstrip() + "\'"
+            
+    dmsetup_cmd = dmsetup_cmd + " |" + " dmsetup create shrink_" + poolname.rstrip()
     #print "running this command.. "
     print dmsetup_cmd
     os.system(dmsetup_cmd)
     name_of_device = "shrink_" + poolname.rstrip()
+    print "also running dmsetup table"
+    cmd2 = "dmsetup table"
+    os.system(cmd2)
     return name_of_device
 
 
 def get_chunksize(pool_name):
     cmd = "lvs -o +chunksize " + pool_name + " | grep -v Chunk" + " > /tmp/chunksize"
     #print "running this cmd now... \n" 
-    #print cmd
+    print cmd
     
     os.system(cmd)
     with open('/tmp/chunksize', 'r') as myfile:
@@ -442,9 +450,12 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
         old_block = changed_entry[0]
         new_block = changed_entry[1]
         len = changed_entry[2]
+        bs = chunksize_string[0:-1]
+        units = chunksize_string[-1].upper()
+        bs_with_units = bs + units
         print ("moving %d blocks at %d to %d" % (len , old_block , new_block) )
-        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + chunksize_string + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(len) + " conv=notrunc"
-        #print cmd
+        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(len) + " conv=notrunc"
+        print cmd
         os.system(cmd)
 
 def cleanup(shrink_device, pool_to_shrink):
@@ -456,6 +467,7 @@ def cleanup(shrink_device, pool_to_shrink):
     os.system(cmd)
     cmd = "vgchange -an " + vgname
     os.system(cmd)
+    os.remove('/tmp/dmsetup_table_grepped')
     
 def delete_restore_lv(pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
