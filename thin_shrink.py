@@ -144,54 +144,66 @@ def get_total_mapped_blocks():
     return total_mapped_blocks
         
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
-    with open('/tmp/dump') as f:
-        first_line = f.readline()
-        first_line_fields = first_line.split()
-        #print first_line_fields
-        nr_blocks_field = first_line_fields[7]
-        #print nr_blocks_field
-        new_line_first_part=""
-        for element in first_line_fields[0:-1]:
-            new_line_first_part = new_line_first_part + " " + element
-        #print new_line_first_part
-        complete_first_line = new_line_first_part + " " + "nr_data_blocks=" + "\"" + str(chunks_to_shrink_to) + "\"" + ">" + "\n"
-        #print complete_first_line
-        complete_first_line = complete_first_line.lstrip()
-        new_xml = open('/tmp/changed.xml', 'w')
-        new_xml.write(complete_first_line)
-        remaining = f.readlines()
-        type(remaining)
+    print "in replace_chunk_numbers_in_xml"
+    print "in replace_chunk_numbers_in_xml"
+    count = 0
+    print "length of list of changes required is..\n"
+    print len(changed_list)
+    new_xml = open('/tmp/changed.xml', 'w')
 
-        for xml_iter in range(0, len(remaining)):
-            wrote_line = 0
-            for changed_iter in changed_list:
-                whether_found = remaining[xml_iter].find(str(changed_iter[0]))
-                if (whether_found > 0):
-                    #print "relevant line of xml is\n"
-                    #print remaining[xml_iter]
-                    #print whether_found
-                    
-                    #check if previous 12 characers are "data_begin" or "data_block=" so we rule out that number appearing in origin mappings
-                    data_begin_or_block = remaining[xml_iter][whether_found-12:whether_found -1 ]
-                    #print data_begin_or_block
-                    if((data_begin_or_block == "data_begin=") or (data_begin_or_block == "data_block=")):
-                        #we need to change the figure now after verifying
-                        first_part_string = remaining[xml_iter][0:whether_found]
-                        if(data_begin_or_block == "data_begin="):
-                            second_index_string = remaining[xml_iter].find("length")
-                        else:
-                            second_index_string = remaining[xml_iter].find("time")
-                        second_part_string = remaining[xml_iter][second_index_string:]
-                        new_string = first_part_string +  str(changed_iter[1]) + "\" " + second_part_string 
-                        #print new_string
-                        new_xml.write(new_string)
-                        wrote_line = 1
-                        break
-            if(wrote_line == 0):
-                new_xml.write(remaining[xml_iter])
+    with open('/tmp/dump') as f:
+        for line in f:
+            if (count == 0): # only do this for the first line, change nr_chunks
+                count=1
+                first_line = line
+                first_line_fields = first_line.split()
+                #print first_line_fields
+                nr_blocks_field = first_line_fields[7]
+                #print nr_blocks_field
+                new_line_first_part=""
+                for element in first_line_fields[0:-1]:
+                    new_line_first_part = new_line_first_part + " " + element
+                #print new_line_first_part
+                complete_first_line = new_line_first_part + " " + "nr_data_blocks=" + "\"" + str(chunks_to_shrink_to) + "\"" + ">" + "\n"
+                #print complete_first_line
+                complete_first_line = complete_first_line.lstrip()
+                new_xml.write(complete_first_line)
+            #remaining = f.readlines()
+            #type(remaining)
+            #for xml_iter in range(0, len(remaining)):
+            else:
+                wrote_line = 0
+                for changed_iter in changed_list:
+                    whether_found = line.find(str(changed_iter[0]))
+                    if (whether_found > 0):
+                        ### TODO make sure you dont get false positives due to substrings !! 
+
+                        #check if previous 12 characers are "data_begin" or "data_block=" so we rule out that number appearing in origin mappings
+
+                        data_begin_or_block = line[whether_found-12:whether_found -1 ]
+                        #print data_begin_or_block
+                        if((data_begin_or_block == "data_begin=") or (data_begin_or_block == "data_block=")):
+                            #we need to change the figure now after verifying
+                            first_part_string = line[0:whether_found]
+                            if(data_begin_or_block == "data_begin="):
+                                second_index_string = line.find("length")
+                            else:
+                                second_index_string = line.find("time")
+                            second_part_string = line[second_index_string:]
+                            new_string = first_part_string +  str(changed_iter[1]) + "\" " + second_part_string 
+                            #print new_string
+                            new_xml.write(new_string)
+                            wrote_line = 1
+                            break
+                if(wrote_line == 0):
+                    # write the unmodified line as it is
+                    new_xml.write(line)
 
         new_xml.close()
         f.close()
+        print "leaving replace_chunk_numbers_in_xml()"
+        print "leaving replace_chunk_numbers_in_xml()"
+        exit()
     
         
 def change_xml(chunks_to_shrink_to, needs_dd=0):
@@ -284,13 +296,14 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
             ranges_requiring_move.sort(key=lambda x: x[1], reverse=True)
             print "\nranges requiring move are"
             print ranges_requiring_move
+
+            print "length of list of free ranges is..\n"
+            print len(free_ranges)
  
             for each_range in ranges_requiring_move:
                 #find closest fitting free range I can move this to
                 len_requiring_move = each_range[1]
                 #print len_requiring_move
-                #print "length of list of free ranges is..\n"
-                #print len(free_ranges)
                 for i in range(len(free_ranges)):
                     if free_ranges[i][1] > len_requiring_move:
                         #found free range to move this range to
