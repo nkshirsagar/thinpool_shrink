@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 import argparse
 import os
+import sys
+import time
+
 
 def calculate_size_in_bytes(size):
     units = size[-1]
@@ -146,8 +149,8 @@ def get_total_mapped_blocks():
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
     print "in replace_chunk_numbers_in_xml"
     count = 0
-    print "length of list of changes required is..\n"
-    print len(changed_list)
+    #logfile.write("length of list of changes required is..\n")
+    #logfile.write(len(changed_list))
     new_xml = open('/tmp/changed.xml', 'w')
 
     with open('/tmp/dump') as f:
@@ -196,7 +199,7 @@ def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
         print "leaving replace_chunk_numbers_in_xml()"
     
         
-def change_xml(chunks_to_shrink_to, needs_dd=0):
+def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
     if (needs_dd == 0):
         # we only need to change the nr_blocks in the xml
         with open('/tmp/dump') as f:
@@ -230,6 +233,7 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
         #changed_list = [] # [(old, new, length) , (old, new, length), ... ]
 
         changed_list = {} # {old: [new,len] , old: [new,len], ... }
+        total_blocks_requiring_copy = 0
 
         with open('/tmp/rmap') as f:
             entire_file = f.readlines()
@@ -277,20 +281,20 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                         #earlier_element = range_to_add
                 earlier_element = range_to_add                  
 
-            print "\nallocated ranges are.."
-            print allocated_ranges 
+            #print "\nallocated ranges are.."
+            #print allocated_ranges 
             #print "\nfree ranges are.."
             #print free_ranges
             free_ranges.sort(key=lambda x: x[1])
-            print "\nsorted free ranges are"
-            print free_ranges
+            #print "\nsorted free ranges are"
+            #print free_ranges
             
             ranges_requiring_move.sort(key=lambda x: x[1], reverse=True)
-            print "\nranges requiring move are"
-            print ranges_requiring_move
+            #print "\nranges requiring move are"
+            #print ranges_requiring_move
 
-            print "length of list of free ranges is..\n"
-            print len(free_ranges)
+            #print "length of list of free ranges is..\n"
+            #print len(free_ranges)
  
             for each_range in ranges_requiring_move:
                 #find closest fitting free range I can move this to
@@ -305,6 +309,7 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                         #changed_element.append(each_range[0])
                         changed_element.append(free_ranges[i][0])
                         changed_element.append(len_requiring_move)
+                        total_blocks_requiring_copy = total_blocks_requiring_copy + len_requiring_move
                         changed_list[each_range[0]] = changed_element
                         #changed_list.append(changed_element)
 
@@ -320,18 +325,35 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                             free_ranges.sort(key=lambda x: x[1])
                             break
 
-            print "\nchange list is.."
-            print changed_list                         
+            #logfile.write("\nchange list is..")
+            #logfile.write(changed_list)                         
+            print "\nlength of change list is.."
+            print len(changed_list)                         
 
             if(len(changed_list) == len(ranges_requiring_move)):
-                replace_chunk_numbers_in_xml(chunks_to_shrink_to ,changed_list) 
-                return changed_list
+                print "This pool can be shrunk, but blocks will need to be moved."
+                total_gb = ( float(total_blocks_requiring_copy) * float(chunksize_in_bytes) ) / 1024 / 1024 /1024
+                print ("Total amount of data requiring move is %.2f GB. Proceed ? Y/N" % (total_gb))
+                if sys.version_info[0]==2:
+                    inp = raw_input()
+                else: # assume python 3 onward
+                    inp = input()
+
+                if(inp.lower() == "y"):
+                    
+                    replace_chunk_numbers_in_xml(chunks_to_shrink_to ,changed_list) 
+                    return changed_list
+                else:
+                    print "Aborting.."
+                    changed_list = {}
+                    return changed_list
             else:
                 print "Cannot fit every range requiring move to free ranges. Cannot shrink pool."
-                changed_list = []
+                changed_list = {}
                 return changed_list
 
 def check_pool_shrink_without_dd(chunks_to_shrink_to):
+  if(os.path.exists('/tmp/rmap')):
     with open('/tmp/rmap') as f:
         for line in f:
             pass
@@ -344,6 +366,9 @@ def check_pool_shrink_without_dd(chunks_to_shrink_to):
         if ((last_block_long - 1) < chunks_to_shrink_to):
             print "This pool can be shrunk without moving blocks. Last mapped block is %d and new size in chunks is %d\n" % ((last_block_long - 1), chunks_to_shrink_to )
             return 1
+  else:
+    print "no /tmp/rmap file found"
+    return 1
             
 def restore_xml_and_swap_metadata(pool_to_shrink):
     #need to create a new lv as large as the metadata
@@ -450,19 +475,33 @@ def restore_vg_metadata(pool_to_shrink):
     os.system(cmd)
 
 
-
 def move_blocks(changed_list,shrink_device,chunksize_string):
+    progress=0
+    percent_done = 0
+    previous_percent = 0
+
     for changed_entry in changed_list:
+        progress=progress+1
+        
         old_block = changed_entry
         new_block = changed_list[changed_entry][0]
-        len = changed_list[changed_entry][1]
+        length = changed_list[changed_entry][1]
         bs = chunksize_string[0:-1]
         units = chunksize_string[-1].upper()
         bs_with_units = bs + units
-        print ("moving %d blocks at %d to %d" % (len , old_block , new_block) )
-        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(len) + " conv=notrunc"
-        print cmd
+        print ("moving %d blocks at %d to %d" % (length , old_block , new_block) )
+        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >& /tmp/dd_out"
+        #print cmd
         os.system(cmd)
+
+        #if(progress % 5 == 0):
+            #percent_done = float((progress * 100)) / float(len(changed_list))
+            #if ((int(percent_done) % 5) ==0 ):
+                #if(percent_done != previous_percent):   
+                 # print("\n%d percent done" % (percent_done)),
+                  #previous_percent = percent_done
+
+            
 
 def cleanup(shrink_device, pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
@@ -483,7 +522,10 @@ def delete_restore_lv(pool_to_shrink):
 
 #TODO close opened files
 
+
 def main():
+    #logfile = open("/tmp/shrink_logs", "w")
+    #logfile.write("starting logs")
     ap = argparse.ArgumentParser()
     ap.add_argument("-L", "--size",  required=True, help="size to shrink to")
     ap.add_argument("-t", "--thinpool", required=True, help="vgname/poolname")
@@ -528,14 +570,14 @@ def main():
         exit()
 
     if( check_pool_shrink_without_dd(chunks_to_shrink_to) == 1):
-        change_xml(chunks_to_shrink_to)
+        change_xml(chunks_to_shrink_to, chunksize_in_bytes)
         restore_xml_and_swap_metadata(pool_to_shrink)
         change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_in_bytes)
         restore_vg_metadata(pool_to_shrink)
         cleanup(shrink_device,pool_to_shrink)
         print("This pool has been shrunk to the specified size of %s" % (size_to_shrink))
     else:
-        changed_list = change_xml(chunks_to_shrink_to,1)
+        changed_list = change_xml(chunks_to_shrink_to, chunksize_in_bytes, 1)
         if(len(changed_list) > 0):
             move_blocks(changed_list,shrink_device,chunksz_string)
             restore_xml_and_swap_metadata(pool_to_shrink)
