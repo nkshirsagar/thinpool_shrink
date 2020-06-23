@@ -489,7 +489,11 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
         bs = chunksize_string[0:-1]
         units = chunksize_string[-1].upper()
         bs_with_units = bs + units
-        print ("moving %d blocks at %d to %d" % (length , old_block , new_block) )
+        if(length>1):
+            print ("moving %d blocks at %d to %d" % (length , old_block , new_block) )
+        else:
+            print ("moving %d block at %d to %d" % (length , old_block , new_block) )
+
         cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >& /tmp/dd_out"
         #print cmd
         os.system(cmd)
