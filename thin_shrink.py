@@ -48,7 +48,7 @@ def activate_metadata_readonly(pool_name):
 def deactivate_metadata(pool_name):
     #print pool_name
     cmd_to_run = "lvchange -an " + pool_name + "_tmeta "
-    print cmd_to_run
+    #print cmd_to_run
     os.system(cmd_to_run)
 
 def thin_dump_metadata(pool_name):
@@ -83,33 +83,33 @@ def create_shrink_device(pool_name):
     os.system(cmd)
     with open('/tmp/dmsetup_table_grepped', 'r') as myfile:
       dmsetup_lines = myfile.readlines()
-    print dmsetup_lines
+    #print dmsetup_lines
     myfile.close()
     dmsetup_cmd = "echo -e " 
     for line_iter in range(0, len(dmsetup_lines)):
         split_dmsetup_line = dmsetup_lines[line_iter].split(':' , 1)
-        print split_dmsetup_line[1]
+        #print split_dmsetup_line[1]
         dmsetup_table_entry_of_tdata = split_dmsetup_line[1].lstrip()
-        print dmsetup_table_entry_of_tdata
+        #print dmsetup_table_entry_of_tdata
         if (line_iter > 0):
             dmsetup_cmd = dmsetup_cmd + "\\" + "\\" + "n"
         dmsetup_cmd = dmsetup_cmd + "\'" + dmsetup_table_entry_of_tdata.rstrip() + "\'"
             
     dmsetup_cmd = dmsetup_cmd + " |" + " dmsetup create shrink_" + poolname.rstrip()
     #print "running this command.. "
-    print dmsetup_cmd
+    #print dmsetup_cmd
     os.system(dmsetup_cmd)
     name_of_device = "shrink_" + poolname.rstrip()
-    print "also running dmsetup table"
-    cmd2 = "dmsetup table"
-    os.system(cmd2)
+    #print "also running dmsetup table"
+    #cmd2 = "dmsetup table"
+    #os.system(cmd2)
     return name_of_device
 
 
 def get_chunksize(pool_name):
     cmd = "lvs -o +chunksize " + pool_name + " | grep -v Chunk" + " > /tmp/chunksize"
     #print "running this cmd now... \n" 
-    print cmd
+    #print cmd
     
     os.system(cmd)
     with open('/tmp/chunksize', 'r') as myfile:
@@ -391,15 +391,15 @@ def restore_xml_and_swap_metadata(pool_to_shrink):
     meta_size = meta_size[:meta_size.index('.')]
     meta_size_str = meta_size + units
     #print meta_size_str
-    cmd = "lvcreate -n restore_lv -L" + meta_size_str + " " + vgname
-    print cmd
+    cmd = "lvcreate -n shrink_restore_lv -L" + meta_size_str + " " + vgname
+    #print cmd
     os.system(cmd)
-    cmd = "thin_restore -i /tmp/changed.xml -o " + "/dev/" + vgname + "/" + "restore_lv"
+    cmd = "thin_restore -i /tmp/changed.xml -o " + "/dev/" + vgname + "/" + "shrink_restore_lv"
     #TODO put a check here to ensure the restore is successful
-    print cmd
+    #print cmd
     os.system(cmd)
-    cmd = "lvconvert --thinpool " + pool_to_shrink + " --poolmetadata " + "/dev/" + vgname + "/restore_lv -y"
-    print cmd
+    cmd = "lvconvert --thinpool " + pool_to_shrink + " --poolmetadata " + "/dev/" + vgname + "/shrink_restore_lv -y"
+    #print cmd
     os.system(cmd)
     
 def change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_in_bytes):
@@ -409,7 +409,7 @@ def change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_i
     #print vgname
     #print lvname
     cmd = "vgcfgbackup -f /tmp/vgmeta_backup " + vgname 
-    print cmd
+    #print cmd
     os.system(cmd)
 
     with open('/tmp/vgmeta_backup') as f:
@@ -510,7 +510,7 @@ def cleanup(shrink_device, pool_to_shrink):
     vgname = vg_and_lv[0]
     cmd = "dmsetup remove " + shrink_device
     os.system(cmd)
-    cmd = "lvremove " + vgname + "/restore_lv"
+    cmd = "lvremove " + vgname + "/shrink_restore_lv"
     os.system(cmd)
     cmd = "vgchange -an " + vgname
     os.system(cmd)
@@ -519,7 +519,7 @@ def cleanup(shrink_device, pool_to_shrink):
 def delete_restore_lv(pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
     vgname = vg_and_lv[0]
-    cmd = "lvremove " + vgname + "/restore_lv"
+    cmd = "lvremove " + vgname + "/shrink_restore_lv"
     os.system(cmd)
 
 #TODO close opened files
