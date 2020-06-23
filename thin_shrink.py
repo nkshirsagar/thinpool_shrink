@@ -145,7 +145,6 @@ def get_total_mapped_blocks():
         
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
     print "in replace_chunk_numbers_in_xml"
-    print "in replace_chunk_numbers_in_xml"
     count = 0
     print "length of list of changes required is..\n"
     print len(changed_list)
@@ -168,40 +167,33 @@ def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
                 #print complete_first_line
                 complete_first_line = complete_first_line.lstrip()
                 new_xml.write(complete_first_line)
-            #remaining = f.readlines()
-            #type(remaining)
-            #for xml_iter in range(0, len(remaining)):
+
             else:
-                wrote_line = 0
-                for changed_iter in changed_list:
-                    whether_found = line.find(str(changed_iter[0]))
-                    if (whether_found > 0):
-                        ### TODO make sure you dont get false positives due to substrings !! 
+                data_found = line.find("data_")
 
-                        #check if previous 12 characers are "data_begin" or "data_block=" so we rule out that number appearing in origin mappings
+                if (data_found > 0):
+                    split_line = line[data_found:]
+                    last_quotes = split_line.index(" ")
+                    blocknum = split_line[12:last_quotes-1]
+                    int_block = int(blocknum)
 
-                        data_begin_or_block = line[whether_found-12:whether_found -1 ]
-                        #print data_begin_or_block
-                        if((data_begin_or_block == "data_begin=") or (data_begin_or_block == "data_block=")):
-                            #we need to change the figure now after verifying
-                            first_part_string = line[0:whether_found]
-                            if(data_begin_or_block == "data_begin="):
-                                second_index_string = line.find("length")
-                            else:
-                                second_index_string = line.find("time")
-                            second_part_string = line[second_index_string:]
-                            new_string = first_part_string +  str(changed_iter[1]) + "\" " + second_part_string 
-                            #print new_string
-                            new_xml.write(new_string)
-                            wrote_line = 1
-                            break
-                if(wrote_line == 0):
-                    # write the unmodified line as it is
+                    if(changed_list.get(int_block,0) == 0):
+                        # write the unmodified line as it is
+                        new_xml.write(line)
+                    else:
+                        print ("block %d found in changed list" % (int_block))
+                        to_change = changed_list[int_block]
+                        first_part_string = line[0:data_found+12]
+                        last_part_string = split_line[last_quotes+1:]
+                        new_string = first_part_string +  str(to_change[0]) + "\" " + last_part_string 
+                        #print new_string
+                        new_xml.write(new_string)
+                else:
                     new_xml.write(line)
+
 
         new_xml.close()
         f.close()
-        print "leaving replace_chunk_numbers_in_xml()"
         print "leaving replace_chunk_numbers_in_xml()"
         exit()
     
@@ -237,7 +229,9 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
         earlier_element=[]
         ranges_requiring_move = []
 
-        changed_list = [] # [(old, new, length) , (old, new, length), ... ]
+        #changed_list = [] # [(old, new, length) , (old, new, length), ... ]
+
+        changed_list = {} # {old: [new,len] , old: [new,len], ... }
 
         with open('/tmp/rmap') as f:
             entire_file = f.readlines()
@@ -310,10 +304,11 @@ def change_xml(chunks_to_shrink_to, needs_dd=0):
                         #print "range mapping of size"
                         #remove that entry from the free ranges list, we will add it back with the reduced length later
                         changed_element = []
-                        changed_element.append(each_range[0])
+                        #changed_element.append(each_range[0])
                         changed_element.append(free_ranges[i][0])
                         changed_element.append(len_requiring_move)
-                        changed_list.append(changed_element)
+                        changed_list[each_range[0]] = changed_element
+                        #changed_list.append(changed_element)
 
                         if((free_ranges[i][1] - len_requiring_move) > 0):
                             new_free_range = []
