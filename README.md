@@ -23,8 +23,6 @@ Usage:
 At the end of the run, you will have a deactivated thin pool reduced to the size you specified, if reduce was possible [1]
 
 [1] The pool will not reduce in size if the new size is lesser than the number of
-mapped blocks in the pool. The pool will also not reduce in size if there are no contiguous extents that 
-are available for moving the range mappings outside the new limit. 
-
------------------------------------
+mapped blocks in the pool. The pool will also not reduce if there is a lack of equal contiguous extents to 
+accomodate range mappings that needs moving. (range mappings will be split in the future - TODO)
 
