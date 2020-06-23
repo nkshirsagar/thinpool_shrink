@@ -147,7 +147,6 @@ def get_total_mapped_blocks():
     return total_mapped_blocks
         
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
-    print "in replace_chunk_numbers_in_xml"
     count = 0
     #logfile.write("length of list of changes required is..\n")
     #logfile.write(len(changed_list))
@@ -196,7 +195,6 @@ def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
 
         new_xml.close()
         f.close()
-        print "leaving replace_chunk_numbers_in_xml()"
     
         
 def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
@@ -479,9 +477,12 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
     progress=0
     percent_done = 0
     previous_percent = 0
+    counter = 0
 
     for changed_entry in changed_list:
+
         progress=progress+1
+        counter = counter + 1
         
         old_block = changed_entry
         new_block = changed_list[changed_entry][0]
@@ -489,23 +490,20 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
         bs = chunksize_string[0:-1]
         units = chunksize_string[-1].upper()
         bs_with_units = bs + units
-        if(length>1):
-            print ("moving %d blocks at %d to %d" % (length , old_block , new_block) )
-        else:
-            print ("moving %d block at %d to %d" % (length , old_block , new_block) )
+        #if(length>1):
+         #   print ("moving %d blocks at %d to %d" % (length , old_block , new_block) )
+        #else:
+         #   print ("moving %d block at %d to %d" % (length , old_block , new_block) )
 
         cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >& /tmp/dd_out"
         #print cmd
         os.system(cmd)
+        one_tenth = len(changed_list) / 10 
+        if(progress  == one_tenth):
+            print("%d moved of %d elements" % (counter, len(changed_list)))
+            progress=0
 
-        #if(progress % 5 == 0):
-            #percent_done = float((progress * 100)) / float(len(changed_list))
-            #if ((int(percent_done) % 5) ==0 ):
-                #if(percent_done != previous_percent):   
-                 # print("\n%d percent done" % (percent_done)),
-                  #previous_percent = percent_done
-
-            
+    print "Done with data copying"        
 
 def cleanup(shrink_device, pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
