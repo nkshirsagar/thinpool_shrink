@@ -181,7 +181,6 @@ def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
                         # write the unmodified line as it is
                         new_xml.write(line)
                     else:
-                        print ("block %d found in changed list" % (int_block))
                         to_change = changed_list[int_block]
                         first_part_string = line[0:data_found+12]
                         last_part_string = split_line[last_quotes+1:]
@@ -195,7 +194,6 @@ def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
         new_xml.close()
         f.close()
         print "leaving replace_chunk_numbers_in_xml()"
-        exit()
     
         
 def change_xml(chunks_to_shrink_to, needs_dd=0):
@@ -455,9 +453,9 @@ def restore_vg_metadata(pool_to_shrink):
 
 def move_blocks(changed_list,shrink_device,chunksize_string):
     for changed_entry in changed_list:
-        old_block = changed_entry[0]
-        new_block = changed_entry[1]
-        len = changed_entry[2]
+        old_block = changed_entry
+        new_block = changed_list[changed_entry][0]
+        len = changed_list[changed_entry][1]
         bs = chunksize_string[0:-1]
         units = chunksize_string[-1].upper()
         bs_with_units = bs + units
