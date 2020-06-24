@@ -35,13 +35,13 @@ def activate_pool(pool_name):
 def deactivate_pool(pool_name):
     #print pool_name
     cmd_to_run = "lvchange -an " + pool_name
-    print cmd_to_run
+    #print cmd_to_run
     os.system(cmd_to_run)
 
 def activate_metadata_readonly(pool_name):
     #print pool_name
     cmd_to_run = "lvchange -ay " + pool_name + "_tmeta -y"
-    print cmd_to_run
+    #print cmd_to_run
     os.system(cmd_to_run)
 
 
@@ -164,8 +164,8 @@ def get_total_mapped_blocks(pool_name):
         dmsetup_status_entry = split_dmsetup_line[6].lstrip()
         used_blocks = dmsetup_status_entry.split('/')[0]
 
-    print "used blocks are.."
-    print used_blocks
+    #print "used blocks are.."
+    #print used_blocks
     return long(used_blocks)
         
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
@@ -622,7 +622,7 @@ def main():
         change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_in_bytes)
         restore_vg_metadata(pool_to_shrink)
         cleanup(shrink_device,pool_to_shrink)
-        print("This pool has been shrunk to the specified size of %s" % (size_to_shrink))
+        print("\nThis pool has been shrunk to the specified size of %s" % (size_to_shrink))
 
     else:
 
@@ -632,7 +632,7 @@ def main():
             restore_xml_and_swap_metadata(pool_to_shrink)
             change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_in_bytes)
             restore_vg_metadata(pool_to_shrink)
-            print("This pool has been shrunk to the specified size of %s" % (size_to_shrink))
+            print("\nThis pool has been shrunk to the specified size of %s" % (size_to_shrink))
         cleanup(shrink_device,pool_to_shrink)
 
 if __name__=="__main__": 
