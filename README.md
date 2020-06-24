@@ -1,39 +1,18 @@
-lvm thin pools cannot be shrunk today
-
-lvs
-  LV   VG            Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
-                                                  
-  p1   thinvg        twi---tz--   2.34g                                                    
-  p2   thinvg        twi---tz-- 100.00m                                                    
-  t1   thinvg        Vwi---tz--   5.00g p1                                                 
-  t2   thinvg        Vwi---tz--   4.00g p1    
-  
-The thinlv shrinks fine,
-
-lvreduce -L1g thinvg/t1
-  Size of logical volume thinvg/t1 changed from 5.00 GiB (1280 extents) to 1.00 GiB (256 extents).
-  Logical volume thinvg/t1 successfully resized.
-  
-The pool doesnt,
+lvm thin pools cannot be shrunk today.
 
 lvreduce -L1g thinvg/p1
+
   Thin pool volumes thinvg/p1_tdata cannot be reduced in size yet.
 
-This is because,
-
-a) The pool may not have written data linearly, and so there might be data at 
+This is because lvm doesn't support reduction of the thin pool data lv (tdata), since) 
+the pool may not have written data linearly, and so there might be data at 
 the end, i.e data chunks may be allocated at the end of the pool device 
 and dm-thin does not provide scrubbing to free it up
 
-b) lvm doesn't support reduction of the thin pool data lv (tdata)
+This tool makes thinpool shrink possible, since it examines thin pool metadata mappings and moves single and range mappings beyond the new size, to free space within the new limit. Once the mappings are moved to free ranges or blocks inside the new  limit, the pool can be safely reduced. So lvm2 can then provide
+support for lvreduce of tdata knowing it can be safely reduced.
 
-Assuming b) will be available in upcoming lvm2 features, this tool makes thinpool shrink possible, and the ability for lvm2 to
-use the freed up space for other logical volumes. It examines thin pool metadata mappings and moves single and range 
-mappings beyond the new size, to free space within the new limit. 
-
-Once the mappings are moved to free ranges or blocks inside the new  limit, the pool can be safely reduced. 
-
-The script changes the thinpool meta data as well as the VG metadata. (Changing the VG metadata will not be necessary once there is 
+As of today, without the tdata reduction support in lvm2, the script changes the thinpool metadata to reflect the new mappings and copies the blocks to the correct new locations. It also changes the VG metadata to reflect the new size of the pool device. (Changing the VG metadata will not be necessary once there is 
 lvm2 support for reduction of the tdata LV)
 
 Run this script on inactive pools with all its thinlvs unmounted.
