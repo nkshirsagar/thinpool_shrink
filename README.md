@@ -9,11 +9,7 @@ the pool may not have written data linearly, and so there might be data at
 the end, i.e data chunks may be allocated at the end of the pool device 
 and dm-thin does not provide scrubbing to free it up
 
-This tool makes thinpool shrink possible, since it examines thin pool metadata mappings and moves single and range mappings beyond the new size, to free space within the new limit. Once the mappings are moved to free ranges or blocks inside the new  limit, the pool can be safely reduced. So lvm2 can then provide
-support for lvreduce of tdata knowing it can be safely reduced.
-
-As of today, without the tdata reduction support in lvm2, the script changes the thinpool metadata to reflect the new mappings and copies the blocks to the correct new locations. It also changes the VG metadata to reflect the new size of the pool device. (Changing the VG metadata will not be necessary once there is 
-lvm2 support for reduction of the tdata LV)
+This tool makes thinpool shrink possible, since it examines thin pool metadata mappings and moves single and range mappings beyond the new size, to free space within the new limit. Once the mappings are moved to free ranges or blocks inside the new  limit, the pool can be safely reduced.
 
 Run this script on inactive pools with all its thinlvs unmounted.
 
