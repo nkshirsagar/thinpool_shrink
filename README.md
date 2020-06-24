@@ -1,6 +1,6 @@
 lvm thin pools cannot be shrunk today
 
-[root@localhost thinpool_shrink]# lvs
+lvs
   LV   VG            Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
                                                   
   p1   thinvg        twi---tz--   2.34g                                                    
@@ -10,13 +10,13 @@ lvm thin pools cannot be shrunk today
   
 The thinlv shrinks fine,
 
-# lvreduce -L1g thinvg/t1
+lvreduce -L1g thinvg/t1
   Size of logical volume thinvg/t1 changed from 5.00 GiB (1280 extents) to 1.00 GiB (256 extents).
   Logical volume thinvg/t1 successfully resized.
   
 The pool doesnt,
 
-# lvreduce -L1g thinvg/p1
+lvreduce -L1g thinvg/p1
   Thin pool volumes thinvg/p1_tdata cannot be reduced in size yet.
 
 This is because,
