@@ -1,4 +1,4 @@
-There are 2 reasons why lvm thin pools cannot be shrunk today.
+lvm thin pools cannot be shrunk today, because,
 
 a) The pool may not have written data linearly, and so there might be data at 
 the end, i.e data chunks may be allocated at the end of the pool device 
