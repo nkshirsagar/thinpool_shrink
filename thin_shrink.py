@@ -124,27 +124,49 @@ def get_chunksize(pool_name):
     return chunksz_string
 
 
-def get_total_mapped_blocks():
-    thin_dumped_xml_file = open("/tmp/dump", "r")
-    thin_dumped_xml = thin_dumped_xml_file.read()
-    
-    lines_containing_mapped_blocks = [line for line in thin_dumped_xml.split('\n') if "mapped_blocks" in line]
-    #print lines_containing_mapped_blocks
-    #print "now calculating total mapped blocks"
-    total_mapped_blocks = 0
-    for line in lines_containing_mapped_blocks:
-        split_line = line.split()
-        mapped_blocks = split_line[2] 
-        #print mapped_blocks
-        num_mapped_blocks = mapped_blocks.split("=")[1] 
-        
-        trimmed_mapped_blocks = num_mapped_blocks[1:-1]
-        #print trimmed_mapped_blocks
-        trimmed_mapped_blocks_int = int(trimmed_mapped_blocks)
-        total_mapped_blocks = total_mapped_blocks + trimmed_mapped_blocks_int
-        
-    print ("number of mapped blocks are ..  %d" % ( total_mapped_blocks ))
-    return total_mapped_blocks
+def get_total_mapped_blocks(pool_name):
+    split_vg_and_pool = pool_name.split('/')
+    vgname = split_vg_and_pool[0]
+    poolname = split_vg_and_pool[1]
+    search_in_dmsetup = vgname + "-" + poolname + "-tpool\:"
+    cmd = "dmsetup status | grep " + search_in_dmsetup + " > /tmp/dmsetup_status_grepped"
+    #print cmd
+    os.system(cmd)
+    with open('/tmp/dmsetup_status_grepped', 'r') as myfile:
+      dmsetup_line = myfile.readlines()
+
+    myfile.close()
+
+    if(len(dmsetup_line)==0): #no vgname-poolname-tpool in dmsetup status
+        print "Warning: No tpool device found, perhaps pool has no thins?"
+        search_in_dmsetup = vgname + "-" + poolname + "\:"
+        cmd = "dmsetup status | grep " + search_in_dmsetup + " > /tmp/dmsetup_status_grepped_no_thin"
+        #print cmd
+        os.system(cmd)
+        with open('/tmp/dmsetup_status_grepped_no_thin', 'r') as myfile:
+            dmsetup_line = myfile.readlines()
+            myfile.close()
+            if(len(dmsetup_line)==0):
+                print "No pool device found in dmsetup status"
+                exit()
+            if(len(dmsetup_line)>1): #this should never happen anyway
+                print "More than 1 device found in dmsetup status"
+                exit()
+
+            # eg: RHELCSB-test_pool: 0 20971520 thin-pool 0 4356/3932160 0/163840 - rw no_discard_passdown queue_if_no_space - 1024 
+            split_dmsetup_line = dmsetup_line[0].split(' ')
+            dmsetup_status_entry = split_dmsetup_line[6].lstrip()
+            used_blocks = dmsetup_status_entry.split('/')[0]
+
+    else: # there is tpool
+        #print dmsetup_lines
+        split_dmsetup_line = dmsetup_line[0].split(' ')
+        dmsetup_status_entry = split_dmsetup_line[6].lstrip()
+        used_blocks = dmsetup_status_entry.split('/')[0]
+
+    print "used blocks are.."
+    print used_blocks
+    return long(used_blocks)
         
 def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
     count = 0
@@ -351,22 +373,26 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
                 return changed_list
 
 def check_pool_shrink_without_dd(chunks_to_shrink_to):
-  if(os.path.exists('/tmp/rmap')):
-    with open('/tmp/rmap') as f:
-        for line in f:
-            pass
-        last_line = line 
-        #print last_line
-        last_range = last_line.split()[1]
-        #print last_range
-        last_block = last_range.split(".")[2]
-        last_block_long = long(last_block)
-        if ((last_block_long - 1) < chunks_to_shrink_to):
-            print "This pool can be shrunk without moving blocks. Last mapped block is %d and new size in chunks is %d\n" % ((last_block_long - 1), chunks_to_shrink_to )
-            return 1
-  else:
-    print "no /tmp/rmap file found"
-    return 1
+    if(os.path.exists('/tmp/rmap')):
+        if(os.path.getsize('/tmp/rmap') > 0):
+            with open('/tmp/rmap') as f:
+              for line in f:
+                pass
+              last_line = line 
+              #print last_line
+              last_range = last_line.split()[1]
+              #print last_range
+              last_block = last_range.split(".")[2]
+              last_block_long = long(last_block)
+              if ((last_block_long - 1) < chunks_to_shrink_to):
+                  print "Pool can be shrunk without moving blocks. Last mapped block is %d and new size in chunks is %d\n" % ((last_block_long - 1), chunks_to_shrink_to )
+                  return 1
+              else:
+                  print "Last mapped block is %d and new size in chunks is %d\n" % ((last_block_long - 1), chunks_to_shrink_to )
+                  return 0
+            
+        print "no valid /tmp/rmap file found. Perhaps this pool has no data mappings ?"
+        return 1
             
 def restore_xml_and_swap_metadata(pool_to_shrink):
     #need to create a new lv as large as the metadata
@@ -418,9 +444,13 @@ def change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_i
         remaining = f.readlines()
         type(remaining)
         search_string = " " + lvname + " {"
+        #print search_string
+        #print "***"
         extent_size_string = "extent_size = "
         extent_size_in_bytes=0
         dont_look_any_more = 0
+        found_search_string = 0
+        found_logical_volumes = 0
         for i in range(0, len(remaining)):
             if dont_look_any_more == 0:
                 if ( remaining[i].find(extent_size_string) != -1 ):
@@ -438,28 +468,36 @@ def change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_i
              
                 if (remaining[i].find("logical_volumes {") != -1): 
                     found_logical_volumes = 1
-                if ((remaining[i].find(search_string) != -1) and (found_logical_volumes == 1)):
-                    found_search_string = 1
-                if (remaining[i].find("extent_count") != -1):
-                    num_tabs = remaining[i].count('\t')
-                    #print "number of tabs is "
-                    #print num_tabs
+                    #print "found the logical volumes"
+                
+                if ((" " + remaining[i].lstrip()).find(search_string) != -1): 
+                    if(found_logical_volumes == 1):
+                      found_search_string = 1
+                      #print "found the search string"
+
+                if (remaining[i].find("extent_count") != -1): 
+                    if(found_search_string == 1):
+                        #print "found the extent count"
+                        num_tabs = remaining[i].count('\t')
+                        #print "number of tabs is "
+                        #print num_tabs
                         
-                    num_whitespaces = len(remaining[i]) - len(remaining[i].lstrip())
-                    #print num_whitespaces
-                    elements = remaining[i].split()
-                    new_size = (chunks_to_shrink_to * chunksize_in_bytes) / extent_size_in_bytes
-                    #print "number of extents to shrink to is "
-                    #print new_size
-                    new_string = "extent_count = " + str(new_size) + "\n" 
-                    #new_string_len = len(new_string) + num_whitespaces
-                    #new_string_with_trailing_spaces = new_string.rjust(new_string_len)
-                    new_string_with_tabs=new_string
-                    for x in range(0,num_tabs-1):
-                        new_string_with_tabs = "\t" + new_string_with_tabs 
-                    new_vgmeta.write(new_string_with_tabs)
-                    dont_look_any_more = 1
-                    continue
+                        num_whitespaces = len(remaining[i]) - len(remaining[i].lstrip())
+                        #print num_whitespaces
+                        elements = remaining[i].split()
+                        new_size = (chunks_to_shrink_to * chunksize_in_bytes) / extent_size_in_bytes
+                        #print "number of extents to shrink to is "
+                        #print new_size
+                        new_string = "extent_count = " + str(new_size) + "\n" 
+                        #new_string_len = len(new_string) + num_whitespaces
+                        #new_string_with_trailing_spaces = new_string.rjust(new_string_len)
+                        new_string_with_tabs=new_string
+                        for x in range(0,num_tabs-1):
+                            new_string_with_tabs = "\t" + new_string_with_tabs 
+                        new_vgmeta.write(new_string_with_tabs)
+                        dont_look_any_more = 1
+                        continue
+
             new_vgmeta.write(remaining[i])
         new_vgmeta.close()
 
@@ -478,6 +516,7 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
     percent_done = 0
     previous_percent = 0
     counter = 0
+    print "Copying blocks to inside the new size.."        
 
     for changed_entry in changed_list:
 
@@ -495,7 +534,7 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
         #else:
          #   print ("moving %d block at %d to %d" % (length , old_block , new_block) )
 
-        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >& /tmp/dd_out"
+        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >/dev/null 2>&1"
         #print cmd
         os.system(cmd)
         one_tenth = len(changed_list) / 10 
@@ -510,11 +549,16 @@ def cleanup(shrink_device, pool_to_shrink):
     vgname = vg_and_lv[0]
     cmd = "dmsetup remove " + shrink_device
     os.system(cmd)
-    cmd = "lvremove " + vgname + "/shrink_restore_lv"
+    cmd = "lvremove " + vgname + "/shrink_restore_lv >/dev/null 2>&1"
     os.system(cmd)
     cmd = "vgchange -an " + vgname
     os.system(cmd)
-    os.remove('/tmp/dmsetup_table_grepped')
+    if os.path.exists('/tmp/dmsetup_table_grepped'):
+        os.remove('/tmp/dmsetup_table_grepped')
+    if os.path.exists('/tmp/dmsetup_status_grepped'):
+        os.remove('/tmp/dmsetup_status_grepped')
+    if os.path.exists('/tmp/dmsetup_status_grepped_no_thin'):
+        os.remove('/tmp/dmsetup_status_grepped_no_thin')
     
 def delete_restore_lv(pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
@@ -538,6 +582,8 @@ def main():
    
     #delete_restore_lv(pool_to_shrink)
     activate_pool(pool_to_shrink)
+    total_mapped_blocks = get_total_mapped_blocks(pool_to_shrink)
+
     shrink_device = create_shrink_device(pool_to_shrink)
 
     chunksz_string = get_chunksize(pool_to_shrink)
@@ -553,7 +599,6 @@ def main():
     thin_rmap_metadata(pool_to_shrink, nr_chunks)
     deactivate_metadata(pool_to_shrink)
   
-    total_mapped_blocks = get_total_mapped_blocks()
     size_to_shrink = args['size']
     size_to_shrink_to_in_bytes = 0L
     size_to_shrink_to_in_bytes = calculate_size_in_bytes(size_to_shrink)
@@ -578,7 +623,9 @@ def main():
         restore_vg_metadata(pool_to_shrink)
         cleanup(shrink_device,pool_to_shrink)
         print("This pool has been shrunk to the specified size of %s" % (size_to_shrink))
+
     else:
+
         changed_list = change_xml(chunks_to_shrink_to, chunksize_in_bytes, 1)
         if(len(changed_list) > 0):
             move_blocks(changed_list,shrink_device,chunksz_string)
