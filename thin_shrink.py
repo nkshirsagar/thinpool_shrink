@@ -194,13 +194,13 @@ def get_total_mapped_blocks(pool_name):
 
     else: # there is tpool
 
+        cmd = "dmsetup status " + search_in_dmsetup
         result = subprocess.check_output(cmd, shell=True)
         
         dmsetup_line = result.splitlines()
         if(len(dmsetup_line)>1): #this should never happen anyway
             print "More than 1 device found in dmsetup status"
             exit()
-        #print dmsetup_lines
         split_dmsetup_line = dmsetup_line[0].split(' ')
         dmsetup_status_entry = split_dmsetup_line[5].lstrip()
         used_blocks = dmsetup_status_entry.split('/')[0]
