@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 import time
+import subprocess
 
 
 def calculate_size_in_bytes(size):
@@ -30,36 +31,54 @@ def calculate_size_in_bytes(size):
 def activate_pool(pool_name):
     #print pool_name
     cmd_to_run = "lvchange -ay " + pool_name
-    os.system(cmd_to_run)
+    #os.system(cmd_to_run)
+    result = subprocess.call(cmd_to_run, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd_to_run))
 
 def deactivate_pool(pool_name):
     #print pool_name
     cmd_to_run = "lvchange -an " + pool_name
     #print cmd_to_run
-    os.system(cmd_to_run)
+    #os.system(cmd_to_run)
+    result = subprocess.call(cmd_to_run, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd_to_run))
 
 def activate_metadata_readonly(pool_name):
     #print pool_name
-    cmd_to_run = "lvchange -ay " + pool_name + "_tmeta -y"
+    cmd_to_run = "lvchange -ay " + pool_name + "_tmeta -y >/dev/null 2>&1"
     #print cmd_to_run
-    os.system(cmd_to_run)
+    #os.system(cmd_to_run)
+    result = subprocess.call(cmd_to_run, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd_to_run))
 
 
 def deactivate_metadata(pool_name):
     #print pool_name
     cmd_to_run = "lvchange -an " + pool_name + "_tmeta "
     #print cmd_to_run
-    os.system(cmd_to_run)
+    #os.system(cmd_to_run)
+    result = subprocess.call(cmd_to_run, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd_to_run))
 
 def thin_dump_metadata(pool_name):
     cmd_to_run = "thin_dump /dev/" + pool_name + "_tmeta" + " > /tmp/dump"
     #print cmd_to_run
-    os.system(cmd_to_run)
+    #os.system(cmd_to_run)
+    result = subprocess.call(cmd_to_run, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd_to_run))
 
 def thin_rmap_metadata(pool_name, nr_chunks_str):
     cmd_to_run = "thin_rmap --region 0.." + nr_chunks_str + " /dev/" + pool_name + "_tmeta" + " > /tmp/rmap"
     #print cmd_to_run
-    os.system(cmd_to_run)
+    #os.system(cmd_to_run)
+    result = subprocess.call(cmd_to_run, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd_to_run))
 
 def get_nr_chunks():
     with open('/tmp/dump') as f:
@@ -78,13 +97,15 @@ def create_shrink_device(pool_name):
     #print vgname
     #print poolname
     search_in_dmsetup = vgname + "-" + poolname + "_tdata"
-    cmd = "dmsetup table | grep " + search_in_dmsetup + " > /tmp/dmsetup_table_grepped"
+    cmd = "dmsetup table | grep " + search_in_dmsetup 
     #print cmd
-    os.system(cmd)
-    with open('/tmp/dmsetup_table_grepped', 'r') as myfile:
-      dmsetup_lines = myfile.readlines()
+    #os.system(cmd)
+    result = subprocess.check_output(cmd, shell=True)
+
+    #with open('/tmp/dmsetup_table_grepped', 'r') as myfile:
     #print dmsetup_lines
-    myfile.close()
+    #myfile.close()
+    dmsetup_lines = result.splitlines()
     dmsetup_cmd = "echo -e " 
     for line_iter in range(0, len(dmsetup_lines)):
         split_dmsetup_line = dmsetup_lines[line_iter].split(':' , 1)
@@ -98,7 +119,11 @@ def create_shrink_device(pool_name):
     dmsetup_cmd = dmsetup_cmd + " |" + " dmsetup create shrink_" + poolname.rstrip()
     #print "running this command.. "
     #print dmsetup_cmd
-    os.system(dmsetup_cmd)
+    #os.system(dmsetup_cmd)
+    result = subprocess.call(dmsetup_cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (dmsetup_cmd))
+
     name_of_device = "shrink_" + poolname.rstrip()
     #print "also running dmsetup table"
     #cmd2 = "dmsetup table"
@@ -107,13 +132,15 @@ def create_shrink_device(pool_name):
 
 
 def get_chunksize(pool_name):
-    cmd = "lvs -o +chunksize " + pool_name + " | grep -v Chunk" + " > /tmp/chunksize"
+    cmd = "lvs -o +chunksize " + pool_name + " | grep -v Chunk" 
     #print "running this cmd now... \n" 
     #print cmd
-    
-    os.system(cmd)
-    with open('/tmp/chunksize', 'r') as myfile:
-      chunk_line = myfile.read()
+    #os.system(cmd)
+
+    result = subprocess.check_output(cmd, shell=True)
+
+    #with open('/tmp/chunksize', 'r') as myfile:
+    chunk_line = result
     #print chunk_line
     chunksz_string = chunk_line.lstrip().rpartition(" ")[-1].rstrip()
     units = chunksz_string[-1]
@@ -128,40 +155,54 @@ def get_total_mapped_blocks(pool_name):
     split_vg_and_pool = pool_name.split('/')
     vgname = split_vg_and_pool[0]
     poolname = split_vg_and_pool[1]
-    search_in_dmsetup = vgname + "-" + poolname + "-tpool\:"
-    cmd = "dmsetup status | grep " + search_in_dmsetup + " > /tmp/dmsetup_status_grepped"
+    search_in_dmsetup_silently = vgname + "-" + poolname + "-tpool >/dev/null 2>&1"
+    search_in_dmsetup = vgname + "-" + poolname + "-tpool"
+    cmd = "dmsetup status " + search_in_dmsetup_silently 
     #print cmd
-    os.system(cmd)
-    with open('/tmp/dmsetup_status_grepped', 'r') as myfile:
-      dmsetup_line = myfile.readlines()
+    #os.system(cmd)
 
-    myfile.close()
+    #first test if command will run and not throw CalledProcessError exception
 
-    if(len(dmsetup_line)==0): #no vgname-poolname-tpool in dmsetup status
+    result = subprocess.call(cmd, shell=True)
+
+    if(result != 0): #no vgname-poolname-tpool in dmsetup status
         print "Warning: No tpool device found, perhaps pool has no thins?"
-        search_in_dmsetup = vgname + "-" + poolname + "\:"
-        cmd = "dmsetup status | grep " + search_in_dmsetup + " > /tmp/dmsetup_status_grepped_no_thin"
+        search_in_dmsetup = vgname + "-" + poolname 
+        search_in_dmsetup_quietly = vgname + "-" + poolname + " >/dev/null 2>&1" 
+        cmd = "dmsetup status " + search_in_dmsetup_quietly
         #print cmd
-        os.system(cmd)
-        with open('/tmp/dmsetup_status_grepped_no_thin', 'r') as myfile:
-            dmsetup_line = myfile.readlines()
-            myfile.close()
-            if(len(dmsetup_line)==0):
-                print "No pool device found in dmsetup status"
-                exit()
-            if(len(dmsetup_line)>1): #this should never happen anyway
-                print "More than 1 device found in dmsetup status"
-                exit()
+        #os.system(cmd)
+        result = subprocess.call(cmd, shell=True)
+        if(result==0):
+            #print "found pool"
+            cmd = "dmsetup status " + search_in_dmsetup
+            result = subprocess.check_output(cmd, shell=True)
+        else:
+            print "did not find pool in dmsetup status"
+            exit()
 
-            # eg: RHELCSB-test_pool: 0 20971520 thin-pool 0 4356/3932160 0/163840 - rw no_discard_passdown queue_if_no_space - 1024 
-            split_dmsetup_line = dmsetup_line[0].split(' ')
-            dmsetup_status_entry = split_dmsetup_line[6].lstrip()
-            used_blocks = dmsetup_status_entry.split('/')[0]
+        dmsetup_line = result.splitlines()
+        if(len(dmsetup_line)>1): #this should never happen anyway
+            print "More than 1 device found in dmsetup status"
+            exit()
+
+        # eg: RHELCSB-test_pool: 0 20971520 thin-pool 0 4356/3932160 0/163840 - rw no_discard_passdown queue_if_no_space - 1024 
+        split_dmsetup_line = dmsetup_line[0].split(' ')
+        dmsetup_status_entry = split_dmsetup_line[5].lstrip()
+        used_blocks = dmsetup_status_entry.split('/')[0]
+
 
     else: # there is tpool
+
+        result = subprocess.check_output(cmd, shell=True)
+        
+        dmsetup_line = result.splitlines()
+        if(len(dmsetup_line)>1): #this should never happen anyway
+            print "More than 1 device found in dmsetup status"
+            exit()
         #print dmsetup_lines
         split_dmsetup_line = dmsetup_line[0].split(' ')
-        dmsetup_status_entry = split_dmsetup_line[6].lstrip()
+        dmsetup_status_entry = split_dmsetup_line[5].lstrip()
         used_blocks = dmsetup_status_entry.split('/')[0]
 
     #print "used blocks are.."
@@ -402,14 +443,12 @@ def restore_xml_and_swap_metadata(pool_to_shrink):
     #print vgname
     #print lvname
     #search for the tmeta size in lvs -a
-    cmd = "lvs -a | grep " + "\"" + " " + vgname + " \" " + "|" + " grep " + "\"" + "\\" +  "[" + lvname + "_tmeta]\"" + " > /tmp/metadata_lv"
+    cmd = "lvs -a | grep " + "\"" + " " + vgname + " \" " + "|" + " grep " + "\"" + "\\" +  "[" + lvname + "_tmeta]\"" 
     #print cmd
-    os.system(cmd)
-    with open('/tmp/metadata_lv', 'r') as myfile:
-      tmeta_line = myfile.read()
+    #os.system(cmd)
+    result = subprocess.check_output(cmd, shell=True)
+    tmeta_line = result
     #print tmeta_line
-    myfile.close()
-    os.remove('/tmp/metadata_lv')
     size_of_metadata = tmeta_line.split()[-1]
     #print size_of_metadata
     units = size_of_metadata[-1]
@@ -417,16 +456,27 @@ def restore_xml_and_swap_metadata(pool_to_shrink):
     meta_size = meta_size[:meta_size.index('.')]
     meta_size_str = meta_size + units
     #print meta_size_str
-    cmd = "lvcreate -n shrink_restore_lv -L" + meta_size_str + " " + vgname
+    cmd = "lvcreate -n shrink_restore_lv -L" + meta_size_str + " " + vgname + " >/dev/null 2>&1"
     #print cmd
-    os.system(cmd)
+    #os.system(cmd)
+
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
+
     cmd = "thin_restore -i /tmp/changed.xml -o " + "/dev/" + vgname + "/" + "shrink_restore_lv"
-    #TODO put a check here to ensure the restore is successful
     #print cmd
-    os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
+
+    #os.system(cmd)
     cmd = "lvconvert --thinpool " + pool_to_shrink + " --poolmetadata " + "/dev/" + vgname + "/shrink_restore_lv -y"
     #print cmd
-    os.system(cmd)
+    #os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
     
 def change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_in_bytes):
     vg_and_lv = pool_to_shrink.split("/")
@@ -434,9 +484,12 @@ def change_vg_metadata(pool_to_shrink, chunks_to_shrink_to,nr_chunks,chunksize_i
     lvname = vg_and_lv[1]
     #print vgname
     #print lvname
-    cmd = "vgcfgbackup -f /tmp/vgmeta_backup " + vgname 
+    cmd = "vgcfgbackup -f /tmp/vgmeta_backup " + vgname  + " >/dev/null 2>&1"
     #print cmd
-    os.system(cmd)
+    #os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
 
     with open('/tmp/vgmeta_backup') as f:
         new_vgmeta = open('/tmp/changed_vgmeta', 'w')
@@ -507,8 +560,11 @@ def restore_vg_metadata(pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
     vgname = vg_and_lv[0]
     lvname = vg_and_lv[1]
-    cmd = "vgcfgrestore -f /tmp/changed_vgmeta " + vgname + " --force -y"
-    os.system(cmd)
+    cmd = "vgcfgrestore -f /tmp/changed_vgmeta " + vgname + " --force -y >/dev/null 2>&1"
+    #os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
 
 
 def move_blocks(changed_list,shrink_device,chunksize_string):
@@ -536,7 +592,11 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
 
         cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >/dev/null 2>&1"
         #print cmd
-        os.system(cmd)
+        #os.system(cmd)
+        result = subprocess.call(cmd, shell=True)
+        if(result != 0):
+            print ("could not run cmd %s" % (cmd))
+
         one_tenth = len(changed_list) / 10 
         if(progress  == one_tenth):
             print("%d moved of %d elements" % (counter, len(changed_list)))
@@ -548,23 +608,32 @@ def cleanup(shrink_device, pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
     vgname = vg_and_lv[0]
     cmd = "dmsetup remove " + shrink_device
-    os.system(cmd)
+    #os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
+
     cmd = "lvremove " + vgname + "/shrink_restore_lv >/dev/null 2>&1"
-    os.system(cmd)
-    cmd = "vgchange -an " + vgname
-    os.system(cmd)
-    if os.path.exists('/tmp/dmsetup_table_grepped'):
-        os.remove('/tmp/dmsetup_table_grepped')
-    if os.path.exists('/tmp/dmsetup_status_grepped'):
-        os.remove('/tmp/dmsetup_status_grepped')
-    if os.path.exists('/tmp/dmsetup_status_grepped_no_thin'):
-        os.remove('/tmp/dmsetup_status_grepped_no_thin')
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
+
+    #os.system(cmd)
+    cmd = "lvchange -an " + pool_to_shrink
+    #os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
+
     
 def delete_restore_lv(pool_to_shrink):
     vg_and_lv = pool_to_shrink.split("/")
     vgname = vg_and_lv[0]
     cmd = "lvremove " + vgname + "/shrink_restore_lv"
-    os.system(cmd)
+    result = subprocess.call(cmd, shell=True)
+    if(result != 0):
+        print ("could not run cmd %s" % (cmd))
+    #os.system(cmd)
 
 #TODO close opened files
 
