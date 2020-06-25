@@ -572,7 +572,7 @@ def move_blocks(changed_list,shrink_device,chunksize_string):
     percent_done = 0
     previous_percent = 0
     counter = 0
-    print "Copying blocks to inside the new size.."        
+    print "Generated new metadata map. Now copying blocks to match the changed metadata."        
 
     for changed_entry in changed_list:
 
