@@ -13,3 +13,5 @@ TODO:
 6) Suggest smallest size pool can be shrunk to. (only possible when 5 is implemented)
 
 7) prevent shrinking different pools at same time
+
+8) ensure pool is inactive when thin_shrink is run
