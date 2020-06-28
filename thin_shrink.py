@@ -209,11 +209,16 @@ def get_total_mapped_blocks(pool_name):
     #print used_blocks
     return long(used_blocks)
         
-def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
+def replace_chunk_numbers_in_xml(chunks_to_shrink_to, all_changes):
+    search_snapshots = 0
     count = 0
     #logfile.write("length of list of changes required is..\n")
     #logfile.write(len(changed_list))
     new_xml = open('/tmp/changed.xml', 'w')
+    split_ranges_changed_list = all_changes[0]
+
+    changed_list = all_changes[1]
+    wroteline = 0
 
     with open('/tmp/dump') as f:
         for line in f:
@@ -241,26 +246,147 @@ def replace_chunk_numbers_in_xml(chunks_to_shrink_to, changed_list):
                     last_quotes = split_line.index(" ")
                     blocknum = split_line[12:last_quotes-1]
                     int_block = int(blocknum)
+                   
+                    if(split_ranges_changed_list.get(int_block,0) == 0): # is this block number not a key in split ranges ?
+		        if(changed_list.get(int_block,0) == 0): #is this block number not a key in changed list ?
 
-                    if(changed_list.get(int_block,0) == 0):
-                        # write the unmodified line as it is
-                        new_xml.write(line)
-                    else:
-                        to_change = changed_list[int_block]
+                            if(search_snapshots==1):
+                            # it may also be a snapshot mapping pointing to inside a range that we may be moving!
+                                if(len(changed_list)>0):
+                                    #print changed_list
+                                    
+                                    candidates = []
+                                    for keys in changed_list:
+                                        #print "integer value of keys is"
+                                        #print int(keys)
+                                        #print "and in_block is"
+                                        #print int_block
+                                        if( int(keys) < int_block):
+                                            candidates.append(keys)
+                                    
+                                    if(len(candidates)>0):
+                                        closest_earlier = max(candidates)
+                                        closest_smaller_key = changed_list[closest_earlier]
+                                        #print closest_smaller_key
+
+                                        #return d[str(max(key for key in map(int, d.keys()) if key <= k))]
+                                        #return sample[str(max(x for x in sample.keys() if int(x) < int(key)))]
+
+                                        closest_range = changed_list[closest_smaller_key]
+
+                                        # if this block lies inside the range we are moving to another range
+                                        if( (int_block > closest_range[0]) and ( int_block < ( int(closest_range[0]) + int(closest_range[1]) ) )):
+                                            #if(int_block < (int(closest_range[0]) + int(closest_range[1])):
+                                            # yes this is a snapshot mapping pointing to inside a range we are moving
+			                    first_part_string = line[0:data_found+12]
+		    	                    last_part_string = split_line[last_quotes+1:]
+                                            changed_snap_blocknum = int(closest_range[0]) + (int_block - int(closest_smaller_key))
+                                            new_string = first_part_string +  str(changed_snap_blocknum) + "\" " + last_part_string
+			                    new_xml.write(line)
+                                            wroteline = 1
+ 
+                                # it may also be a snapshot mapping pointing to inside a SPLIT range we are moving !! 
+                                if( (len(split_ranges_changed_list)>0) and (wroteline == 0)):
+                                    candidates = []
+                                    for keys in split_ranges_changed_list:
+                                        if( int(keys) < int_block):
+                                            candidates.append(keys)
+                                    if(len(candidates)>0):
+                                        closest_smaller_key = split_ranges_changed_list[max(candidates)]
+                                        closest_range = split_ranges_changed_list[closest_smaller_key]
+                                        if((int_block > closest_range[0]) and (int_block < (int(closest_range[0]) + int(closest_range[1])))):
+
+                                            # yes this is a snapshot mapping pointing to inside a split range we are moving
+			                    first_part_string = line[0:data_found+12]
+		    	                    last_part_string = split_line[last_quotes+1:]
+                                            changed_snap_blocknum = int(closest_range[0]) + (int_block - int(closest_smaller_key))
+                                            new_string = first_part_string +  str(changed_snap_blocknum) + "\" " + last_part_string
+			                    new_xml.write(line)
+                                            wroteline = 1
+
+                                if(wroteline == 0):    
+			            # write the unmodified line as it is
+			            new_xml.write(line)
+
+                            else:    
+                                # dont bother with snapshots, assume none exist 
+			        # write the unmodified line as it is
+			        new_xml.write(line)
+
+		        else: # its in changed list
+			    to_change = changed_list[int_block]
+			    first_part_string = line[0:data_found+12]
+		    	    last_part_string = split_line[last_quotes+1:]
+			    new_string = first_part_string +  str(to_change[0]) + "\" " + last_part_string 
+			    #print new_string
+			    new_xml.write(new_string)
+
+                    else: #its in the split ranges
+                        # change line of xml for first and generates lines for all lookaheads
+
+                        #  <range_mapping origin_begin="63962" data_begin="817969" length="26" time="0"/>
+                        
+
+                        to_change = split_ranges_changed_list[int_block]
                         first_part_string = line[0:data_found+12]
                         last_part_string = split_line[last_quotes+1:]
-                        new_string = first_part_string +  str(to_change[0]) + "\" " + last_part_string 
+                        #   last_part_string is now looking like 
+                        #   length="26" time="0"/>
+                        
+                        #length needs reducing
+                        split_last_line = last_part_string.split(" ")
+                        
+                        new_string = first_part_string +  str(to_change[0]) + "\" " + "length=\"" + str(to_change[1])  + "\" " + split_last_line[1]
                         #print new_string
                         new_xml.write(new_string)
+                       
+                        # now do the lookaheads
+                        new_block = int_block 
+                        origin_block =0
+                        split_first_part = first_part_string.split("=")
+                       
+                        origin_string = split_first_part[1].split(" ")[0] # "63962"
+                        origin = origin_string[1:-1]
+                        int_origin = int(origin)
+                        #print int_origin
+                        time_string = line.split(" ")[-1]
+                        new_origin = int_origin
+                        spaces_before_string = line[0:line.index('<')]
+                        #print to_change
+                        while to_change[2]==1: #while lookahead
+                            new_block = new_block + to_change[1] 
+                            new_origin = new_origin + int(to_change[1])
+                            to_change = split_ranges_changed_list[new_block]
+
+                            #     <range_mapping origin_begin="63962" data_begin="817969" length="26" time="0"/>
+                            #     <single_mapping origin_block="63960" data_block="767381" time="0"/>
+
+                            if(to_change[1]>1): #range mapping
+                                new_string = spaces_before_string +  "<range_mapping origin_begin=\"" + str(new_origin) + " data_begin=\"" + str(new_block) + "\" length=" + "\"" + str(to_change[1]) + "\" " + time_string
+                                new_xml.write(new_string) 
+                            else:
+                                if(to_change[1]==1): #single mapping
+                                    new_string = spaces_before_string + "<single_mapping origin_block=\"" + str(new_origin) + " data_block=\"" + str(new_block) + "\" " + time_string
+                                    new_xml.write(new_string) 
+                                else:
+                                    print "This should never happen. size of mapping seems 0"
+
+
                 else:
                     new_xml.write(line)
 
 
         new_xml.close()
         f.close()
+
+###########################
+        #cleanup()
+        #exit()
+###########################
     
         
 def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
+    #print "in change xml"
     if (needs_dd == 0):
         # we only need to change the nr_blocks in the xml
         with open('/tmp/dump') as f:
@@ -293,6 +419,7 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
 
         #changed_list = [] # [(old, new, length) , (old, new, length), ... ]
 
+        split_ranges_changed_list= {} # {old:[new,len,lookahead} note that lookahead is bool i.e 1 or 0
         changed_list = {} # {old: [new,len] , old: [new,len], ... }
         total_blocks_requiring_copy = 0
 
@@ -316,10 +443,6 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
                     earlier_element = range_to_add
 
                 else: 
-                    #print start_block
-                    #print end_block
-                    #print "\n printing earlier element"
-                    #print earlier_element
 
                     #iteration 1 onwards, start creating free_ranges list also
 
@@ -344,8 +467,13 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
 
             #print "\nallocated ranges are.."
             #print allocated_ranges 
-            #print "\nfree ranges are.."
-            #print free_ranges
+
+            ##########################################
+            # used for testing split ranges
+            #free_ranges = [[1,1],[200,300],[700,400],[1200,500]]
+            #ranges_requiring_move = [[3000,600], [5000,550]]
+            ##########################################
+
             free_ranges.sort(key=lambda x: x[1])
             #print "\nsorted free ranges are"
             #print free_ranges
@@ -356,62 +484,163 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
 
             #print "length of list of free ranges is..\n"
             #print len(free_ranges)
- 
-            for each_range in ranges_requiring_move:
-                #find closest fitting free range I can move this to
-                len_requiring_move = each_range[1]
-                #print len_requiring_move
-                for i in range(len(free_ranges)):
-                    if free_ranges[i][1] > len_requiring_move:
-                        #found free range to move this range to
-                        #print "range mapping of size"
-                        #remove that entry from the free ranges list, we will add it back with the reduced length later
-                        changed_element = []
-                        #changed_element.append(each_range[0])
-                        changed_element.append(free_ranges[i][0])
-                        changed_element.append(len_requiring_move)
-                        total_blocks_requiring_copy = total_blocks_requiring_copy + len_requiring_move
-                        changed_list[each_range[0]] = changed_element
-                        #changed_list.append(changed_element)
+  
 
-                        if((free_ranges[i][1] - len_requiring_move) > 0):
-                            new_free_range = []
-                            new_free_range_block = free_ranges[i][0]+len_requiring_move
-                            new_range_length = free_ranges[i][1] - len_requiring_move
-                            new_free_range.append(new_free_range_block)
-                            new_free_range.append(new_range_length)
-                            free_ranges.pop(i)
-                            free_ranges.append(new_free_range)
-                             #sort it again, so this element is put in proper place
-                            free_ranges.sort(key=lambda x: x[1])
-                            break
+            total_needing_copy = sum(need_copy[1] for need_copy in ranges_requiring_move)
+            total_free = sum(available_free[1] for available_free in free_ranges)
+            #print "total needing copy is"
+            #print total_needing_copy
+            #print "total free is"
+            #print total_free
 
-            #logfile.write("\nchange list is..")
-            #logfile.write(changed_list)                         
-            print "\nlength of change list is.."
-            print len(changed_list)                         
-
-            if(len(changed_list) == len(ranges_requiring_move)):
-                print "This pool can be shrunk, but blocks will need to be moved."
-                total_gb = ( float(total_blocks_requiring_copy) * float(chunksize_in_bytes) ) / 1024 / 1024 /1024
-                print ("Total amount of data requiring move is %.2f GB. Proceed ? Y/N" % (total_gb))
-                if sys.version_info[0]==2:
-                    inp = raw_input()
-                else: # assume python 3 onward
-                    inp = input()
-
-                if(inp.lower() == "y"):
-                    
-                    replace_chunk_numbers_in_xml(chunks_to_shrink_to ,changed_list) 
-                    return changed_list
-                else:
-                    print "Aborting.."
-                    changed_list = {}
-                    return changed_list
-            else:
-                print "Cannot fit every range requiring move to free ranges. Cannot shrink pool."
+            if(total_needing_copy > total_free):
+                print "this pool cannot be shrunk because not enough free blocks available" 
+                print "total needing copy is"
+                print total_needing_copy
+                print "total free is"
+                print total_free
                 changed_list = {}
                 return changed_list
+
+
+            # at this point, we know that we can shrink the pool 
+
+            #print "free ranges are"
+            #print free_ranges
+            #print "ranges requiring move are"
+            #print ranges_requiring_move
+
+            for each_range in ranges_requiring_move:
+                len_requiring_move = each_range[1]
+                #print len_requiring_move
+                could_split=0
+                this_range_has_fit=0   
+                # find out if it needs splitting
+ 
+                if(len_requiring_move > free_ranges[-1][1]):
+                    print "This one will need splitting. the range to move is"
+                    print each_range
+                    print "the free ranges "
+                    print free_ranges
+                    #old_block = each_range[0]
+                    reversed_free_ranges = reversed(free_ranges) 
+                    moved = 0
+                    split_range = []
+                    for iterate_free_backwards in reversed_free_ranges:
+                        if(iterate_free_backwards[1] < len_requiring_move): #if we must use this entire range
+                            split_range.append(iterate_free_backwards[0]) 
+                            split_range.append(iterate_free_backwards[1])
+                            split_range.append(1)
+
+                            index = each_range[0]  + moved
+                            split_ranges_changed_list[index]=split_range
+
+                            # split_ranges_changed_list looks like this
+                            # [old: new,len,lookahead] , lookahead is 0 or 1 and specifies to look ahead to generate xml for next
+                            #  element in split_ranges_changed_list too because you wont find that one in the xml in blocks to change since its 
+                            # from the  middle of a range that you split.
+
+                            total_blocks_requiring_copy = total_blocks_requiring_copy + split_range[1]
+                            moved = moved + split_range[1]
+
+                            free_ranges.pop()
+                            len_requiring_move = len_requiring_move - split_range[1]
+
+                        else:
+                            this_range_has_fit = 1
+                            # partial free range to accomodate last remaining part of large range
+                            split_range = []
+                            split_range.append(iterate_free_backwards[0])
+                            split_range.append(len_requiring_move)
+                            split_range.append(0)
+                            index = each_range[0] + moved
+                            split_ranges_changed_list[index]=split_range
+
+                            #adjust the free ranges
+                            #remove first from free ranges
+                            last_one = free_ranges.pop()
+                            #add back with changed free map unless it was completely consumed
+ 
+                            if(len_requiring_move < last_one[1]):
+                                temp_free_range = []
+                                blknum = last_one[0]
+                                new_blknum = blknum + len_requiring_move
+                                print new_blknum
+
+                                temp_free_range.append(new_blknum)
+                                len_changed = last_one[1]
+                                changed_len = len_changed - len_requiring_move
+                                #print changed_len
+                                temp_free_range.append(changed_len)
+                                print "temp free range is is."
+                                print temp_free_range
+                                print free_ranges
+                                free_ranges.append(temp_free_range)
+                                print free_ranges
+                                #sort it again, so this element is put in proper place
+                                free_ranges.sort(key=lambda x: x[1])
+                                total_blocks_requiring_copy = total_blocks_requiring_copy + len_requiring_move
+                                print "done splitting this range"
+                                print "free ranges are now"
+                                print free_ranges
+                                print "and split ranges changed list is "
+                                print split_ranges_changed_list
+                                break
+                
+                else: 
+                    #find closest fitting free range I can move this to
+                    for i in range(len(free_ranges)):
+                        if free_ranges[i][1] > len_requiring_move:
+                            #found free range to move this range to
+                            #print "range mapping of size"
+                            #remove that entry from the free ranges list, we will add it back with the reduced length later
+                            changed_element = []
+                            #changed_element.append(each_range[0])
+                            changed_element.append(free_ranges[i][0])
+                            changed_element.append(len_requiring_move)
+                            total_blocks_requiring_copy = total_blocks_requiring_copy + len_requiring_move
+                            changed_list[each_range[0]] = changed_element
+                            #changed_list.append(changed_element)
+
+                            if((free_ranges[i][1] - len_requiring_move) > 0):
+                                new_free_range = []
+                                new_free_range_block = free_ranges[i][0]+len_requiring_move
+                                new_range_length = free_ranges[i][1] - len_requiring_move
+                                new_free_range.append(new_free_range_block)
+                                new_free_range.append(new_range_length)
+                                free_ranges.pop(i)
+                                free_ranges.append(new_free_range)
+                                #sort it again, so this element is put in proper place
+                                free_ranges.sort(key=lambda x: x[1])
+                                break
+
+            print "\nlength of change list is.."
+            print len(changed_list)                         
+            print "\nlength of split range list is.."
+            print len(split_ranges_changed_list)                         
+
+            #make a list that stores both the lists, split_ranges_changed_list and changed_list
+            all_changes = []
+            all_changes.append(split_ranges_changed_list)
+            all_changes.append(changed_list)
+
+            #if(len(changed_list) == len(ranges_requiring_move)):
+            print "This pool can be shrunk, but blocks will need to be moved."
+            total_gb = ( float(total_blocks_requiring_copy) * float(chunksize_in_bytes) ) / 1024 / 1024 /1024
+            print ("Total amount of data requiring move is %.2f GB. Proceed ? Y/N" % (total_gb))
+            if sys.version_info[0]==2:
+                inp = raw_input()
+            else: # assume python 3 onward
+                inp = input()
+
+            if(inp.lower() == "y"):
+                
+                replace_chunk_numbers_in_xml(chunks_to_shrink_to ,all_changes) 
+                return all_changes
+            else:
+                print "Aborting.."
+                zero_list = [] 
+                return zero_list
 
 def check_pool_shrink_without_dd(chunks_to_shrink_to):
     if(os.path.exists('/tmp/rmap')):
@@ -457,15 +686,17 @@ def restore_xml_and_swap_metadata(pool_to_shrink):
     meta_size_str = meta_size + units
     #print meta_size_str
     cmd = "lvcreate -n shrink_restore_lv -L" + meta_size_str + " " + vgname + " >/dev/null 2>&1"
-    #print cmd
+    print cmd
     #os.system(cmd)
 
     result = subprocess.call(cmd, shell=True)
     if(result != 0):
         print ("could not run cmd %s" % (cmd))
+    else:
+        print "ran the command"
 
     cmd = "thin_restore -i /tmp/changed.xml -o " + "/dev/" + vgname + "/" + "shrink_restore_lv"
-    #print cmd
+    print cmd
     result = subprocess.call(cmd, shell=True)
     if(result != 0):
         print ("could not run cmd %s" % (cmd))
@@ -567,12 +798,42 @@ def restore_vg_metadata(pool_to_shrink):
         print ("could not run cmd %s" % (cmd))
 
 
-def move_blocks(changed_list,shrink_device,chunksize_string):
+def move_blocks(combined_changed_list,shrink_device,chunksize_string):
     progress=0
     percent_done = 0
     previous_percent = 0
     counter = 0
     print "Generated new metadata map. Now copying blocks to match the changed metadata."        
+    split_ranges_list = combined_changed_list[0]
+    changed_list = combined_changed_list[1]
+
+    for changed_entry in split_ranges_list: # move split ranges first
+        progress=progress+1
+        counter = counter + 1
+    
+        old_block = changed_entry
+        new_block = split_ranges_list[changed_entry][0]
+        length = split_ranges_list[changed_entry][1]
+        bs = chunksize_string[0:-1]
+        units = chunksize_string[-1].upper()
+        bs_with_units = bs + units
+        #if(length>1):
+         #   print ("moving %d blocks at %d to %d" % (length , old_block , new_block) )
+        #else:
+         #   print ("moving %d block at %d to %d" % (length , old_block , new_block) )
+
+        cmd = "dd if=/dev/mapper/" + shrink_device + " of=/dev/mapper/" + shrink_device + " bs=" + bs_with_units + " skip=" + str(old_block) + " seek=" + str(new_block) + " count=" + str(length) + " conv=notrunc >/dev/null 2>&1"
+        #print cmd
+        #os.system(cmd)
+        result = subprocess.call(cmd, shell=True)
+        if(result != 0):
+            print ("could not run cmd %s" % (cmd))
+
+        one_tenth = len(split_ranges_list) / 10
+        if(progress  == one_tenth):
+            print("%d moved of %d elements" % (counter, len(split_ranges_list)))
+            progress=0
+
 
     for changed_entry in changed_list:
 
@@ -639,6 +900,7 @@ def delete_restore_lv(pool_to_shrink):
 
 
 def main():
+
     #logfile = open("/tmp/shrink_logs", "w")
     #logfile.write("starting logs")
     ap = argparse.ArgumentParser()
@@ -703,6 +965,8 @@ def main():
             restore_vg_metadata(pool_to_shrink)
             print("\nThis pool has been shrunk to the specified size of %s" % (size_to_shrink))
         cleanup(shrink_device,pool_to_shrink)
+
+    #change_xml(5000,1000,1)
 
 if __name__=="__main__": 
     main() 
