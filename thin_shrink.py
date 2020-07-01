@@ -441,6 +441,18 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
 
                 if (i == 0): # first iteration 
                     earlier_element = range_to_add
+                    if(start_block > 0):
+                        if(int(start_block) < chunks_to_shrink_to): #if starting block is within the new size
+                            free_range_element = []
+                            free_range_element.append(0)
+                            free_range_element.append(int(start_block))
+                            if((free_range_element[0] + free_range_element[1]) < chunks_to_shrink_to): #if entire free range is within new size
+                                free_ranges.append(free_range_element)    
+                                #earlier_element = range_to_add
+                            else:
+                                free_range_element.pop(1) #get rid of older length, needs trimming
+                                free_range_element.append(chunks_to_shrink_to - (earlier_element[0])) #length of free range that will fit within new size
+                                free_ranges.append(free_range_element)
 
                 else: 
 
@@ -460,9 +472,6 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
                                 free_range_element.pop(1) #get rid of older length, needs trimming
                                 free_range_element.append(chunks_to_shrink_to - (earlier_element[0])) #length of free range that will fit within new size
                                 free_ranges.append(free_range_element)
-                            #earlier_element = range_to_add
-                    #else:
-                        #earlier_element = range_to_add
                 earlier_element = range_to_add                  
 
             #print "\nallocated ranges are.."
@@ -966,7 +975,7 @@ def main():
             print("\nThis pool has been shrunk to the specified size of %s" % (size_to_shrink))
         cleanup(shrink_device,pool_to_shrink)
 
-    #change_xml(5000,1000,1)
+    #change_xml(114688,65536,1)
 
 if __name__=="__main__": 
     main() 
