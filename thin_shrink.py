@@ -5,6 +5,7 @@ import sys
 import time
 import subprocess
 
+# https://bugzilla.redhat.com/show_bug.cgi?id=1847795
 
 def calculate_size_in_bytes(size):
     units = size[-1]
@@ -441,7 +442,7 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
 
                 if (i == 0): # first iteration 
                     earlier_element = range_to_add
-                    if(start_block > 0):
+                    if(int(start_block) > 0):
                         if(int(start_block) < chunks_to_shrink_to): #if starting block is within the new size
                             free_range_element = []
                             free_range_element.append(0)
@@ -508,16 +509,20 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
                 print total_needing_copy
                 print "total free is"
                 print total_free
+                print "free ranges are"
+                print free_ranges
+                print "ranges requiring move are"
+                print ranges_requiring_move
                 changed_list = {}
                 return changed_list
 
 
             # at this point, we know that we can shrink the pool 
 
-            #print "free ranges are"
-            #print free_ranges
-            #print "ranges requiring move are"
-            #print ranges_requiring_move
+            print "free ranges are"
+            print free_ranges
+            print "ranges requiring move are"
+            print ranges_requiring_move
 
             for each_range in ranges_requiring_move:
                 len_requiring_move = each_range[1]
@@ -623,10 +628,14 @@ def change_xml(chunks_to_shrink_to, chunksize_in_bytes, needs_dd=0):
                                 free_ranges.sort(key=lambda x: x[1])
                                 break
 
-            print "\nlength of change list is.."
+            print "length of change list is.."
             print len(changed_list)                         
-            print "\nlength of split range list is.."
+            print "change list is"
+            print changed_list
+            print "length of split range list is.."
             print len(split_ranges_changed_list)                         
+            print "split ranges changed list is"
+            print split_ranges_changed_list
 
             #make a list that stores both the lists, split_ranges_changed_list and changed_list
             all_changes = []
@@ -695,14 +704,12 @@ def restore_xml_and_swap_metadata(pool_to_shrink):
     meta_size_str = meta_size + units
     #print meta_size_str
     cmd = "lvcreate -n shrink_restore_lv -L" + meta_size_str + " " + vgname + " >/dev/null 2>&1"
-    print cmd
+    #print cmd
     #os.system(cmd)
 
     result = subprocess.call(cmd, shell=True)
     if(result != 0):
         print ("could not run cmd %s" % (cmd))
-    else:
-        print "ran the command"
 
     cmd = "thin_restore -i /tmp/changed.xml -o " + "/dev/" + vgname + "/" + "shrink_restore_lv"
     print cmd
@@ -909,6 +916,7 @@ def delete_restore_lv(pool_to_shrink):
 
 
 def main():
+
 
     #logfile = open("/tmp/shrink_logs", "w")
     #logfile.write("starting logs")
