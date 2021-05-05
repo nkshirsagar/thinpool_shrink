@@ -22,3 +22,6 @@ At the end of the run, you will have a deactivated thin pool reduced to the size
 mapped blocks in the pool. The pool will also not reduce if there is a lack of equal contiguous extents to 
 accomodate range mappings that needs moving. (range mappings will be split in the future - TODO)
 
+---------------------
+
+Update: This work has been credited upstream as a POC and will be rewritten in rust - https://github.com/jthornber/thin-provisioning-tools/commit/b67b587a109ccdab49f9d5ca1ed90a5a8fcc9467
