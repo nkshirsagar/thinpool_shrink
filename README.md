@@ -7,7 +7,8 @@ lvreduce -L1g thinvg/p1
 This is because lvm doesn't support reduction of the thin pool data lv (tdata), since) 
 the pool may not have written data linearly, and so there might be data at 
 the end, i.e data chunks may be allocated at the end of the pool device 
-and dm-thin does not provide scrubbing to free it up
+and dm-thin does not provide defrag or some process to free it up and place it all linearly. 
+
 
 This tool makes thinpool shrink possible, since it examines thin pool metadata mappings and moves single and range mappings beyond the new size, to free space within the new limit. Once the mappings are moved to free ranges or blocks inside the new  limit, the pool can be safely reduced.
 
