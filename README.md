@@ -25,3 +25,5 @@ accomodate range mappings that needs moving. (range mappings will be split in th
 ---------------------
 
 This work has been used as a reference for a rust based implementation of thin_shrink https://github.com/jthornber/thin-provisioning-tools/blob/main/src/bin/thin_shrink.rs
+
+(upstream commit mentioning this project - https://github.com/jthornber/thin-provisioning-tools/commit/b67b587a109ccdab49f9d5ca1ed90a5a8fcc9467 )
